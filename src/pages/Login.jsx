@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
-import { Link } from "react-router-dom";
+// import { Link } from "react-router-dom";
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -187,7 +188,7 @@ export default function Login() {
                 "Login to Dashboard"
               )}
             </button>
-            <div className="text-center mt-6">
+            {/* <div className="text-center mt-6">
               <p className="text-sm text-gray-600">
                 Need to create an admin account?{" "}
                 <Link
@@ -197,7 +198,7 @@ export default function Login() {
                   Create Admin
                 </Link>
               </p>
-            </div>
+            </div> */}
           </form>
 
           <div className="footer">
