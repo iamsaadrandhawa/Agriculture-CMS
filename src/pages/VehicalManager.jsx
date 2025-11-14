@@ -14,7 +14,7 @@ import {
 import { auth, db } from "../lib/firebase";
 import { getCurrentUser } from "../components/userUtils";
 
-export default function AgricultureVehicles() {
+export default function VehicalManager() {
     const [showForm, setShowForm] = useState(false);
     const [vehicleNumber, setVehicleNumber] = useState("");
     const [vehicleType, setVehicleType] = useState("Tractor");

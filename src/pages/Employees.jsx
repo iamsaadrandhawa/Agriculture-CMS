@@ -504,7 +504,7 @@ export default function EmployeeManager() {
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden text-[12px] text-gray-800">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[12px]">
+              <thead className="bg-green-600 text-white text-[12px]">
                 <tr>
                   <th className="px-6 py-3 text-left">Employee</th>
                   <th className="px-6 py-3 text-left">Designation</th>
@@ -516,14 +516,14 @@ export default function EmployeeManager() {
               <tbody className="divide-y divide-gray-200 text-[12px]">
                 {filteredEmployees.length > 0 ? (
                   filteredEmployees.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-blue-50 transition-all duration-200 group">
+                    <tr key={emp.id} className="hover:bg-green-50 transition-all duration-200 group">
                       <td className="px-6 py-2 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-[12px]">
+                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-[12px]">
                             {emp.name?.charAt(0)?.toUpperCase() || "E"}
                           </div>
                           <div className="ml-3">
-                            <div className="text-[12px] font-semibold text-gray-900 group-hover:text-blue-600">{emp.name}</div>
+                            <div className="text-[12px] font-semibold text-gray-900 group-hover:text-green-600">{emp.name}</div>
                             <div className="text-[10px] text-gray-500">ID: {emp.id.substring(0, 8)}...</div>
                           </div>
                         </div>
