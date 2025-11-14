@@ -6,7 +6,7 @@ import {
   Users,
   ChartColumn,
   Tag,
-  Bike,
+  Tractor,
   UserPlus,
   Network,
 } from "lucide-react";
@@ -17,8 +17,8 @@ import Reports from "./Reports";
 import NewInstallation from "./NewInstallation";
 import Employees from "./Employees";
 import LedgerCodes from "./LedgerCodes";
-import BikeManager from "./BikeManager";
 import UserManager from "./UserManager";
+import VehicalManager from "./VehicalManager";
 
 // ✅ Helper to load user role from localStorage
 function getStoredUser() {
@@ -94,7 +94,7 @@ export default function Dashboard() {
       case "ledger-codes":
         return <LedgerCodes {...sharedProps} />;
       case "bikes":
-        return <BikeManager {...sharedProps} />;
+        return <VehicalManager {...sharedProps} />;
       case "user-manager":
         return role === "admin" ? (
           <UserManager />
@@ -205,8 +205,8 @@ export default function Dashboard() {
               : "bg-white text-gray-700 hover:bg-gray-200"
           }`}
       >
-        <Bike className="w-4 h-4" />
-        <span className="text-sm font-medium">Bikes</span>
+        <Tractor className="w-4 h-4" />
+        <span className="text-sm font-medium">Vehicals</span>
       </div>
 
       {/* User Manager — Only visible to Admins */}
