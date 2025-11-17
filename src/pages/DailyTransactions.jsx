@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Download, SaveAll, Trash2, Calendar, Tag, Edit, EyeIcon, Lock, Clock, Search, X } from "lucide-react";
+import { Plus, Download, SaveAll, Trash2, Calendar, Tag, Edit, EyeIcon, Lock, Clock, Search, X, ClipboardPlus } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import { collection, getDocs, query, where, addDoc, orderBy, deleteDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -1183,7 +1183,7 @@ export default function DailyTransactions() {
                         {/* Locked Add Button */}
                         <div className="text-gray-400 flex items-center gap-1 cursor-not-allowed">
                           <Lock className="w-3 h-3" />
-                          <Plus className="w-3 h-3" />
+                          <ClipboardPlus className="w-3 h-3" />
                         </div>
                       </div>
                     ) : (
@@ -1203,7 +1203,7 @@ export default function DailyTransactions() {
                           className="text-green-600 hover:text-green-800 transition p-1 rounded hover:bg-green-50"
                           title="Add new row"
                         >
-                          <Plus className="w-3 h-3" />
+                          <ClipboardPlus className="w-3 h-3" />
                         </button>
                       </div>
                     )}
