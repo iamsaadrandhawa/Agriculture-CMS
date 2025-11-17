@@ -674,7 +674,7 @@ export default function VehicalManager() {
                 )}
 
                 {/* Vehicles Table */}
-                <div className="overflow-x-auto mt-6 rounded-2xl border border-gray-200 shadow-lg">
+                <div className="overflow-x-auto mt-6 rounded-2xl border border-gray-200 shadow-lg ">
                     <table className="w-full text-left text-gray-700 rounded-2xl overflow-hidden" style={{ fontSize: "12px" }}>
                         <thead className="bg-green-600 text-white">
                             <tr>

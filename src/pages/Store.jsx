@@ -948,16 +948,16 @@ export default function AgriStore() {
                         <table className="w-full">
                             <thead className="bg-gradient-to-r from-green-600 to-green-700 text-white text-[12px]">
                                 <tr>
-                                    <th className="px-6 py-3 text-left">Date</th>
-                                    <th className="px-6 py-3 text-left">Type</th>
-                                    <th className="px-6 py-3 text-left">Product</th>
-                                    <th className="px-6 py-3 text-left">Quantity</th>
-                                    <th className="px-6 py-3 text-right">Rate (Rs.)</th>
-                                    <th className="px-6 py-3 text-right">Amount (Rs.)</th>
-                                    <th className="px-6 py-3 text-left">Location</th>
-                                    <th className="px-6 py-3 text-left">Land Area</th>
-                                    <th className="px-6 py-3 text-left">Remarks</th>
-                                    <th className="px-6 py-3 text-center">Actions</th>
+                                    <th className="px-6 py-2 text-left">Date</th>
+                                    <th className="px-6 py-2 text-left">Type</th>
+                                    <th className="px-6 py-2 text-left">Product</th>
+                                    <th className="px-6 py-2 text-left">Quantity</th>
+                                    <th className="px-6 py-2 text-right">Rate (Rs.)</th>
+                                    <th className="px-6 py-2 text-right">Amount (Rs.)</th>
+                                    <th className="px-6 py-2 text-left">Location</th>
+                                    <th className="px-6 py-2 text-left">Land Area</th>
+                                    <th className="px-6 py-2 text-left">Remarks</th>
+                                    <th className="px-6 py-2 text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 text-[12px]">

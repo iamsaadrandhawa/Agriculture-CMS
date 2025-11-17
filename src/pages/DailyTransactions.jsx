@@ -914,7 +914,7 @@ export default function DailyTransactions() {
   <div className="w-full border border-gray-300 rounded-lg bg-white shadow-sm text-xs mb-6">
   <div className="min-w-[1000px]">
     {/* Green Theme Header */}
-    <div className="grid grid-cols-9 gap-15 mb-2 px-3 py-3 font-semibold text-white text-xs bg-gradient-to-r from-green-600 to-green-700 rounded-t-lg">
+    <div className="grid grid-cols-9 gap-15 mb-2 px-3 py-2 font-semibold text-white text-xs bg-gradient-to-r from-green-600 to-green-700 rounded-t-lg">
       <div className="flex items-center">Ledger Code</div>
       <div className="flex items-center">Employee</div>
       <div className="flex items-center justify-end">Cash In</div>

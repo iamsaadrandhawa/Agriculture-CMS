@@ -300,15 +300,30 @@ export default function LedgerManager() {
   return (
     <div className="w-full mx-auto py-3 px-4 text-[12px]">
       <div>
-        {/* Header with Filters Row */}
+        {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Tag className="w-4 h-4 text-purple-600" />
             <h2 className="text-lg font-bold text-gray-900">Ledger Code Management</h2>
           </div>
           
-          {/* Filters Row - Left of Add Button */}
-          <div className="flex items-center gap-2 flex-1 max-w-2xl justify-end ml-65">
+          {/* Add Button */}
+          <button
+            onClick={() => {
+              setIsAdding(true);
+              setEditingId(null);
+              setFormData({ code: "", category: "income", subCategory: "", employee_id: "" });
+            }}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[12px] rounded-lg hover:from-purple-600 hover:to-purple-700 transition flex-shrink-0"
+          >
+            <Plus className="w-3 h-3" />
+            Add Ledger
+          </button>
+        </div>
+
+        {/* Filters Section */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-3 mb-4">
+          <div className="flex items-center gap-2">
             {/* Search Filter */}
             <div className="relative">
               <Search className="w-3 h-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -317,7 +332,7 @@ export default function LedgerManager() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search ledgers..."
-                className="w-48 pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-[12px] text-black"
+                className="w-250 pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-[12px] text-black"
               />
             </div>
 
@@ -366,19 +381,6 @@ export default function LedgerManager() {
               Clear
             </button>
           </div>
-
-          {/* Add Button */}
-          <button
-            onClick={() => {
-              setIsAdding(true);
-              setEditingId(null);
-              setFormData({ code: "", category: "income", subCategory: "", employee_id: "" });
-            }}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[12px] rounded-lg hover:from-purple-600 hover:to-purple-700 transition flex-shrink-0"
-          >
-            <Plus className="w-3 h-3" />
-            Add Ledger
-          </button>
         </div>
 
         {/* Results Count */}
@@ -473,7 +475,7 @@ export default function LedgerManager() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Income Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+            <h3 className="text-[12px] bg-green-600 font-semibold text-white mb-1 flex items-center gap-2 rounded-t-lg p-2">
               <span>💰</span>
               Income ({incomeCategories.length})
             </h3>
@@ -509,7 +511,7 @@ export default function LedgerManager() {
 
           {/* Expense Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+            <h3 className="text-[12px] bg-green-600 font-semibold text-white mb-1 flex items-center gap-2 rounded-t-lg p-2">
               <span>💸</span>
               Expense ({expenseCategories.length})
             </h3>
@@ -545,7 +547,7 @@ export default function LedgerManager() {
 
           {/* Location Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+            <h3 className="text-[12px] bg-green-600 font-semibold text-white mb-1 flex items-center gap-2 rounded-t-lg p-2">
               <span>📍</span>
               Location ({locationCategories.length})
             </h3>
@@ -581,7 +583,7 @@ export default function LedgerManager() {
 
           {/* Product Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+            <h3 className="text-[12px] bg-green-600 font-semibold text-white mb-1 flex items-center gap-2 rounded-t-lg p-2">
               <span>📦</span>
               Product ({productCategories.length})
             </h3>
@@ -615,6 +617,7 @@ export default function LedgerManager() {
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

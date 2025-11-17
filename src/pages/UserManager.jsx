@@ -317,12 +317,12 @@ export default function UserManager() {
                         <table className="w-full">
                             <thead className="bg-green-600 text-white text-[12px]">
                                 <tr>
-                                    <th className="px-6 py-3 text-left">Name</th>
-                                    <th className="px-6 py-3 text-left">Username</th>
-                                    <th className="px-6 py-3 text-left">Email</th>
-                                    <th className="px-6 py-3 text-left">Role</th>
-                                    <th className="px-6 py-3 text-center">Status</th>
-                                    <th className="px-6 py-3 text-center">Actions</th>
+                                    <th className="px-6 py-2 text-left">Name</th>
+                                    <th className="px-6 py-2 text-left">Username</th>
+                                    <th className="px-6 py-2 text-left">Email</th>
+                                    <th className="px-6 py-2 text-left">Role</th>
+                                    <th className="px-6 py-2 text-center">Status</th>
+                                    <th className="px-6 py-2 text-center">Actions</th>
                                 </tr>
                             </thead>
 

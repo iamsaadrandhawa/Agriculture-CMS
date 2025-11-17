@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Save, Users, Edit3, Trash2, Search, Filter, X, UserPlus, Lock } from "lucide-react";
+import { Plus, Save, Users, Edit3, Trash2, Search, Filter, X, UserPlus, Lock, Tag } from "lucide-react";
 import {
   collection,
   addDoc,
@@ -331,13 +331,9 @@ export default function EmployeeManager() {
                 </>
               )}
             </button>
-
-
-
-
-
           </div>
         </div>
+
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-[12px]">
@@ -506,11 +502,11 @@ export default function EmployeeManager() {
             <table className="w-full">
               <thead className="bg-green-600 text-white text-[12px]">
                 <tr>
-                  <th className="px-6 py-3 text-left">Employee</th>
-                  <th className="px-6 py-3 text-left">Designation</th>
-                  <th className="px-6 py-3 text-right">Salary</th>
-                  <th className="px-6 py-3 text-center">Status</th>
-                  <th className="px-6 py-3 text-center">Actions</th>
+                  <th className="px-6 py-2 text-left">Employee</th>
+                  <th className="px-6 py-2 text-left">Designation</th>
+                  <th className="px-6 py-2 text-right">Salary</th>
+                  <th className="px-6 py-2 text-center">Status</th>
+                  <th className="px-6 py-2 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 text-[12px]">
