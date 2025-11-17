@@ -613,7 +613,7 @@ export default function VehicalManager() {
                         <div className="flex justify-end">
                             <button
                                 onClick={handleSave}
-                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-xl font-semibold"
+                                className="flex items-center gap-2 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
                                 disabled={loading}
                             >
                                 <Save className="w-4 h-4" /> {editingId ? "Update Vehicle" : "Save Vehicle"}

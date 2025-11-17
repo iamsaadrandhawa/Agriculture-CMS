@@ -1,6 +1,6 @@
 // LedgerManager.jsx
 import { useState, useEffect } from "react";
-import { Plus, CreditCard as Edit2, Trash2, Save, X, Tag, Search, Users } from "lucide-react";
+import { Plus, CreditCard as Edit2, Trash2, Save, X, Tag, Search, Users, Package } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import {
   collection,
@@ -95,6 +95,7 @@ export default function LedgerManager() {
   const incomeCategories = filteredLedgerCodes.filter((lc) => lc.category === "income");
   const expenseCategories = filteredLedgerCodes.filter((lc) => lc.category === "expense");
   const locationCategories = filteredLedgerCodes.filter((lc) => lc.category === "location");
+  const productCategories = filteredLedgerCodes.filter((lc) => lc.category === "product");
 
   const createLedgerTotalFieldName = (ledgerName) => {
     return `total_${ledgerName.toLowerCase().replace(/\s+/g, "_")}`;
@@ -285,6 +286,17 @@ export default function LedgerManager() {
     return employee ? employee.name : "Unknown";
   };
 
+  // Get category color and icon
+  const getCategoryConfig = (category) => {
+    const configs = {
+      income: { color: "green", bgColor: "bg-green-50", borderColor: "border-green-200", textColor: "text-green-800", icon: "💰" },
+      expense: { color: "red", bgColor: "bg-red-50", borderColor: "border-red-200", textColor: "text-red-800", icon: "💸" },
+      location: { color: "yellow", bgColor: "bg-yellow-50", borderColor: "border-yellow-200", textColor: "text-yellow-800", icon: "📍" },
+      product: { color: "blue", bgColor: "bg-blue-50", borderColor: "border-blue-200", textColor: "text-blue-800", icon: "📦" }
+    };
+    return configs[category] || configs.income;
+  };
+
   return (
     <div className="w-full mx-auto py-3 px-4 text-[12px]">
       <div>
@@ -319,6 +331,7 @@ export default function LedgerManager() {
               <option value="income">Income</option>
               <option value="expense">Expense</option>
               <option value="location">Location</option>
+              <option value="product">Product</option>
             </select>
 
             {/* Sub-Category Filter */}
@@ -390,7 +403,7 @@ export default function LedgerManager() {
                   type="text"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  placeholder="e.g., Cash, Office Expense"
+                  placeholder="e.g., Cash, Office Expense, Urea, Field A"
                   className="w-full px-2 py-1 border text-black border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-[12px]"
                 />
                 <p className="text-[11px] text-gray-500 mt-1">
@@ -404,9 +417,10 @@ export default function LedgerManager() {
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full px-2 py-1 border text-black border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-[12px]"
                 >
-                  <option value="income">Income</option>
-                  <option value="expense">Expense</option>
-                  <option value="location">Location</option>
+                  <option value="income">💰 Income</option>
+                  <option value="expense">💸 Expense</option>
+                  <option value="location">📍 Location</option>
+                  <option value="product">📦 Product</option>
                 </select>
               </div>
               <div>
@@ -415,7 +429,7 @@ export default function LedgerManager() {
                   type="text"
                   value={formData.subCategory}
                   onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
-                  placeholder="e.g., Lunch, Salary, Bandwidth"
+                  placeholder="e.g., Lunch, Salary, Bandwidth, Fertilizer, Farm"
                   className="w-full px-2 py-1 border text-black border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-[12px]"
                 />
                 <p className="text-[11px] text-gray-500 mt-1">Used for filtering</p>
@@ -439,7 +453,7 @@ export default function LedgerManager() {
               <button
                 onClick={handleAdd}
                 disabled={loading || !formData.code.trim()}
-                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-[12px] rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
               >
                 <Save className="w-3 h-3" />
                 {loading ? "Saving..." : "Save"}
@@ -455,106 +469,39 @@ export default function LedgerManager() {
           </div>
         )}
 
-        {/* Ledger Lists */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Ledger Lists - Now 4 columns */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Income Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1">
-              Income Categories ({incomeCategories.length})
+            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+              <span>💰</span>
+              Income ({incomeCategories.length})
             </h3>
             <div className="space-y-1">
               {incomeCategories.map((lc) =>
                 editingId === lc.id ? (
-                  <div key={lc.id} className="bg-green-50 rounded-lg p-2">
-                    <div className="space-y-1">
-                      <div className="grid grid-cols-2 gap-1">
-                        <input
-                          type="text"
-                          value={formData.code}
-                          onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-[12px]"
-                          placeholder="Ledger Name"
-                        />
-                        <input
-                          type="text"
-                          value={formData.subCategory}
-                          onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-[12px]"
-                          placeholder="Sub Category"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-1">
-                        <select
-                          value={formData.employee_id}
-                          onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-[12px]"
-                        >
-                          <option value="">Select Employee</option>
-                          {employees.map(emp => (
-                            <option key={emp.id} value={emp.id}>{emp.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleUpdate(lc.id)}
-                          disabled={loading || !formData.code.trim()}
-                          className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white text-[12px] rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-                        >
-                          <Save className="w-3 h-3" />
-                          {loading ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
-                        >
-                          <X className="w-3 h-3" />
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
+                  <EditForm 
                     key={lc.id}
-                    className={`flex items-center justify-between p-2 bg-green-50 rounded-lg ${!lc.is_active ? "opacity-50" : ""}`}
-                  >
-                    <div>
-                      <span className="font-medium text-gray-900 text-[12px] block">{lc.code}</span>
-                      <div className="flex gap-2 flex-wrap">
-                        {lc.subCategory && (
-                          <span className="text-[11px] bg-green-200 text-green-800 px-1 rounded">
-                            {lc.subCategory}
-                          </span>
-                        )}
-                        {lc.employee_id && (
-                          <span className="text-[11px] bg-blue-200 text-blue-800 px-1 rounded flex items-center gap-1">
-                            <Users className="w-2 h-2" />
-                            {getEmployeeName(lc.employee_id)}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-gray-500">
-                          total_{lc.code.toLowerCase().replace(/\s+/g, "_")}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => toggleActive(lc.id, lc.is_active)}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
-                          lc.is_active ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-gray-200 text-gray-600 hover:bg-gray-300"
-                        }`}
-                      >
-                        {lc.is_active ? "Active" : "Inactive"}
-                      </button>
-                      <button onClick={() => startEdit(lc)} className="p-1 text-gray-600 hover:bg-white rounded transition">
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => handleDelete(lc.id)} className="p-1 text-red-600 hover:bg-red-100 rounded transition">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
+                    lc={lc}
+                    formData={formData}
+                    setFormData={setFormData}
+                    employees={employees}
+                    loading={loading}
+                    handleUpdate={handleUpdate}
+                    cancelEdit={cancelEdit}
+                    color="green"
+                  />
+                ) : (
+                  <LedgerItem 
+                    key={lc.id}
+                    lc={lc}
+                    employees={employees}
+                    getEmployeeName={getEmployeeName}
+                    toggleActive={toggleActive}
+                    startEdit={startEdit}
+                    handleDelete={handleDelete}
+                    category="income"
+                  />
                 )
               )}
             </div>
@@ -562,102 +509,35 @@ export default function LedgerManager() {
 
           {/* Expense Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1">
-              Expense Categories ({expenseCategories.length})
+            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+              <span>💸</span>
+              Expense ({expenseCategories.length})
             </h3>
             <div className="space-y-1">
               {expenseCategories.map((lc) =>
                 editingId === lc.id ? (
-                  <div key={lc.id} className="bg-red-50 rounded-lg p-2">
-                    <div className="space-y-1">
-                      <div className="grid grid-cols-2 gap-1">
-                        <input
-                          type="text"
-                          value={formData.code}
-                          onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-[12px]"
-                          placeholder="Ledger Name"
-                        />
-                        <input
-                          type="text"
-                          value={formData.subCategory}
-                          onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-[12px]"
-                          placeholder="Sub Category"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-1">
-                        <select
-                          value={formData.employee_id}
-                          onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-[12px]"
-                        >
-                          <option value="">Select Employee</option>
-                          {employees.map(emp => (
-                            <option key={emp.id} value={emp.id}>{emp.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleUpdate(lc.id)}
-                          disabled={loading || !formData.code.trim()}
-                          className="flex items-center gap-1 px-2 py-1 bg-red-600 text-white text-[12px] rounded-lg hover:bg-red-700 transition disabled:opacity-50"
-                        >
-                          <Save className="w-3 h-3" />
-                          {loading ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
-                        >
-                          <X className="w-3 h-3" />
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
+                  <EditForm 
                     key={lc.id}
-                    className={`flex items-center justify-between p-2 bg-red-50 rounded-lg ${!lc.is_active ? "opacity-50" : ""}`}
-                  >
-                    <div>
-                      <span className="font-medium text-gray-900 text-[12px] block">{lc.code}</span>
-                      <div className="flex gap-2 flex-wrap">
-                        {lc.subCategory && (
-                          <span className="text-[11px] bg-red-200 text-red-800 px-1 rounded">
-                            {lc.subCategory}
-                          </span>
-                        )}
-                        {lc.employee_id && (
-                          <span className="text-[11px] bg-blue-200 text-blue-800 px-1 rounded flex items-center gap-1">
-                            <Users className="w-2 h-2" />
-                            {getEmployeeName(lc.employee_id)}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-gray-500">
-                          total_{lc.code.toLowerCase().replace(/\s+/g, "_")}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => toggleActive(lc.id, lc.is_active)}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
-                          lc.is_active ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-gray-200 text-gray-600 hover:bg-gray-300"
-                        }`}
-                      >
-                        {lc.is_active ? "Active" : "Inactive"}
-                      </button>
-                      <button onClick={() => startEdit(lc)} className="p-1 text-gray-600 hover:bg-white rounded transition">
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => handleDelete(lc.id)} className="p-1 text-red-600 hover:bg-red-100 rounded transition">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
+                    lc={lc}
+                    formData={formData}
+                    setFormData={setFormData}
+                    employees={employees}
+                    loading={loading}
+                    handleUpdate={handleUpdate}
+                    cancelEdit={cancelEdit}
+                    color="red"
+                  />
+                ) : (
+                  <LedgerItem 
+                    key={lc.id}
+                    lc={lc}
+                    employees={employees}
+                    getEmployeeName={getEmployeeName}
+                    toggleActive={toggleActive}
+                    startEdit={startEdit}
+                    handleDelete={handleDelete}
+                    category="expense"
+                  />
                 )
               )}
             </div>
@@ -665,108 +545,210 @@ export default function LedgerManager() {
 
           {/* Location Section */}
           <div>
-            <h3 className="text-[12px] font-semibold text-gray-900 mb-1">
-              Location Categories ({locationCategories.length})
+            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+              <span>📍</span>
+              Location ({locationCategories.length})
             </h3>
             <div className="space-y-1">
               {locationCategories.map((lc) =>
                 editingId === lc.id ? (
-                  <div key={lc.id} className="bg-yellow-50 rounded-lg p-2">
-                    <div className="space-y-1">
-                      <div className="grid grid-cols-2 gap-1">
-                        <input
-                          type="text"
-                          value={formData.code}
-                          onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none text-[12px]"
-                          placeholder="Ledger Name"
-                        />
-                        <input
-                          type="text"
-                          value={formData.subCategory}
-                          onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none text-[12px]"
-                          placeholder="Sub Category"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-1">
-                        <select
-                          value={formData.employee_id}
-                          onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none text-[12px]"
-                        >
-                          <option value="">Select Employee</option>
-                          {employees.map(emp => (
-                            <option key={emp.id} value={emp.id}>{emp.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleUpdate(lc.id)}
-                          disabled={loading || !formData.code.trim()}
-                          className="flex items-center gap-1 px-2 py-1 bg-yellow-600 text-white text-[12px] rounded-lg hover:bg-yellow-700 transition disabled:opacity-50"
-                        >
-                          <Save className="w-3 h-3" />
-                          {loading ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
-                        >
-                          <X className="w-3 h-3" />
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
+                  <EditForm 
                     key={lc.id}
-                    className={`flex items-center justify-between p-2 bg-yellow-50 rounded-lg ${!lc.is_active ? "opacity-50" : ""}`}
-                  >
-                    <div>
-                      <span className="font-medium text-gray-900 text-[12px] block">{lc.code}</span>
-                      <div className="flex gap-2 flex-wrap">
-                        {lc.subCategory && (
-                          <span className="text-[11px] bg-yellow-200 text-yellow-800 px-1 rounded">
-                            {lc.subCategory}
-                          </span>
-                        )}
-                        {lc.employee_id && (
-                          <span className="text-[11px] bg-blue-200 text-blue-800 px-1 rounded flex items-center gap-1">
-                            <Users className="w-2 h-2" />
-                            {getEmployeeName(lc.employee_id)}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-gray-500">
-                          total_{lc.code.toLowerCase().replace(/\s+/g, "_")}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => toggleActive(lc.id, lc.is_active)}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
-                          lc.is_active ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200" : "bg-gray-200 text-gray-600 hover:bg-gray-300"
-                        }`}
-                      >
-                        {lc.is_active ? "Active" : "Inactive"}
-                      </button>
-                      <button onClick={() => startEdit(lc)} className="p-1 text-gray-600 hover:bg-white rounded transition">
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => handleDelete(lc.id)} className="p-1 text-red-600 hover:bg-red-100 rounded transition">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
+                    lc={lc}
+                    formData={formData}
+                    setFormData={setFormData}
+                    employees={employees}
+                    loading={loading}
+                    handleUpdate={handleUpdate}
+                    cancelEdit={cancelEdit}
+                    color="yellow"
+                  />
+                ) : (
+                  <LedgerItem 
+                    key={lc.id}
+                    lc={lc}
+                    employees={employees}
+                    getEmployeeName={getEmployeeName}
+                    toggleActive={toggleActive}
+                    startEdit={startEdit}
+                    handleDelete={handleDelete}
+                    category="location"
+                  />
                 )
               )}
             </div>
           </div>
 
+          {/* Product Section */}
+          <div>
+            <h3 className="text-[12px] font-semibold text-gray-900 mb-1 flex items-center gap-1">
+              <span>📦</span>
+              Product ({productCategories.length})
+            </h3>
+            <div className="space-y-1">
+              {productCategories.map((lc) =>
+                editingId === lc.id ? (
+                  <EditForm 
+                    key={lc.id}
+                    lc={lc}
+                    formData={formData}
+                    setFormData={setFormData}
+                    employees={employees}
+                    loading={loading}
+                    handleUpdate={handleUpdate}
+                    cancelEdit={cancelEdit}
+                    color="blue"
+                  />
+                ) : (
+                  <LedgerItem 
+                    key={lc.id}
+                    lc={lc}
+                    employees={employees}
+                    getEmployeeName={getEmployeeName}
+                    toggleActive={toggleActive}
+                    startEdit={startEdit}
+                    handleDelete={handleDelete}
+                    category="product"
+                  />
+                )
+              )}
+            </div>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Edit Form Component
+function EditForm({ lc, formData, setFormData, employees, loading, handleUpdate, cancelEdit, color }) {
+  const colorConfig = {
+    green: { bg: "bg-green-50", button: "bg-green-600 hover:bg-green-700", ring: "focus:ring-green-500" },
+    red: { bg: "bg-red-50", button: "bg-red-600 hover:bg-red-700", ring: "focus:ring-red-500" },
+    yellow: { bg: "bg-yellow-50", button: "bg-yellow-600 hover:bg-yellow-700", ring: "focus:ring-yellow-500" },
+    blue: { bg: "bg-blue-50", button: "bg-blue-600 hover:bg-blue-700", ring: "focus:ring-blue-500" }
+  };
+
+  const config = colorConfig[color] || colorConfig.green;
+
+  return (
+    <div className={`${config.bg} rounded-lg p-2`}>
+      <div className="space-y-1">
+        <div className="grid grid-cols-2 gap-1">
+          <input
+            type="text"
+            value={formData.code}
+            onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+            className={`w-full px-2 py-1 border border-gray-300 rounded-lg ${config.ring} outline-none text-[12px]`}
+            placeholder="Ledger Name"
+          />
+          <input
+            type="text"
+            value={formData.subCategory}
+            onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
+            className={`w-full px-2 py-1 border border-gray-300 rounded-lg ${config.ring} outline-none text-[12px]`}
+            placeholder="Sub Category"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-1">
+          <select
+            value={formData.employee_id}
+            onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
+            className={`w-full px-2 py-1 border border-gray-300 rounded-lg ${config.ring} outline-none text-[12px]`}
+          >
+            <option value="">Select Employee</option>
+            {employees.map(emp => (
+              <option key={emp.id} value={emp.id}>{emp.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleUpdate(lc.id)}
+            disabled={loading || !formData.code.trim()}
+            className={`flex items-center gap-1 px-2 py-1 ${config.button} bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition`}
+          >
+            <Save className="w-3 h-3" />
+            {loading ? "Saving..." : "Save"}
+          </button>
+          <button
+            onClick={cancelEdit}
+            className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
+          >
+            <X className="w-3 h-3" />
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Ledger Item Component
+function LedgerItem({ lc, employees, getEmployeeName, toggleActive, startEdit, handleDelete, category }) {
+  const categoryConfig = {
+    income: { 
+      bg: "bg-green-50", 
+      badge: "bg-green-200 text-green-800",
+      button: "bg-green-100 text-green-700 hover:bg-green-200"
+    },
+    expense: { 
+      bg: "bg-red-50", 
+      badge: "bg-red-200 text-red-800",
+      button: "bg-red-100 text-red-700 hover:bg-red-200"
+    },
+    location: { 
+      bg: "bg-yellow-50", 
+      badge: "bg-yellow-200 text-yellow-800",
+      button: "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+    },
+    product: { 
+      bg: "bg-blue-50", 
+      badge: "bg-blue-200 text-blue-800",
+      button: "bg-blue-100 text-blue-700 hover:bg-blue-200"
+    }
+  };
+
+  const config = categoryConfig[category] || categoryConfig.income;
+
+  return (
+    <div
+      className={`flex items-center justify-between p-2 ${config.bg} rounded-lg ${!lc.is_active ? "opacity-50" : ""}`}
+    >
+      <div>
+        <span className="font-medium text-gray-900 text-[12px] block">{lc.code}</span>
+        <div className="flex gap-2 flex-wrap">
+          {lc.subCategory && (
+            <span className={`text-[11px] ${config.badge} px-1 rounded`}>
+              {lc.subCategory}
+            </span>
+          )}
+          {lc.employee_id && (
+            <span className="text-[11px] bg-blue-200 text-blue-800 px-1 rounded flex items-center gap-1">
+              <Users className="w-2 h-2" />
+              {getEmployeeName(lc.employee_id)}
+            </span>
+          )}
+          <span className="text-[11px] text-gray-500">
+            total_{lc.code.toLowerCase().replace(/\s+/g, "_")}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => toggleActive(lc.id, lc.is_active)}
+          className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
+            lc.is_active ? config.button : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+          }`}
+        >
+          {lc.is_active ? "Active" : "Inactive"}
+        </button>
+        <button onClick={() => startEdit(lc)} className="p-1 text-gray-600 hover:bg-white rounded transition">
+          <Edit2 className="w-3 h-3" />
+        </button>
+        <button onClick={() => handleDelete(lc.id)} className="p-1 text-red-600 hover:bg-red-100 rounded transition">
+          <Trash2 className="w-3 h-3" />
+        </button>
       </div>
     </div>
   );

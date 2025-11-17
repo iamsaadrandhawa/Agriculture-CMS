@@ -297,7 +297,7 @@ export default function UserManager() {
                         <div className="flex gap-2">
                             <button
                                 onClick={handleSave}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 transition-all text-xs"
+                                className="flex items-center gap-2 px-2 py-1 bg-gray-200 text-gray-700 text-[12px] rounded-lg hover:bg-gray-300 transition"
                             >
                                 Save
                             </button>

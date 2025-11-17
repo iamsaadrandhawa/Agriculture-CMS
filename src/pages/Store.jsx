@@ -9,6 +9,8 @@ import {
     deleteDoc,
     doc,
     Timestamp,
+    query,
+    where,
 } from "firebase/firestore";
 import {
     Package,
@@ -27,14 +29,20 @@ import {
     Truck,
     Calendar,
     Download,
-    BarChart3
+    BarChart3,
+    ShoppingCart,
+    ArrowUpCircle,
+    ArrowDownCircle,
+    Tag,
+    Users
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 export default function AgriStore() {
     const [role, setRole] = useState("");
-    const [showForm, setShowForm] = useState(false);
+    const [showPurchaseForm, setShowPurchaseForm] = useState(false);
+    const [showIssueForm, setShowIssueForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [transactions, setTransactions] = useState([]);
     const [products, setProducts] = useState([]);
@@ -45,17 +53,23 @@ export default function AgriStore() {
     const [filterLocation, setFilterLocation] = useState("all");
     const [filterDate, setFilterDate] = useState("");
 
-    // Form fields
-    const [date, setDate] = useState("");
-    const [transactionType, setTransactionType] = useState("stock_in");
-    const [productName, setProductName] = useState("");
-    const [quantity, setQuantity] = useState("");
-    const [unit, setUnit] = useState("kg");
-    const [rate, setRate] = useState("");
-    const [location, setLocation] = useState("");
-    const [landArea, setLandArea] = useState("");
-    const [remarks, setRemarks] = useState("");
+    // Form fields - Purchase
+    const [purchaseDate, setPurchaseDate] = useState("");
+    const [purchaseProduct, setPurchaseProduct] = useState("");
+    const [purchaseQuantity, setPurchaseQuantity] = useState("");
+    const [purchaseUnit, setPurchaseUnit] = useState("kg");
+    const [purchaseRate, setPurchaseRate] = useState("");
     const [supplier, setSupplier] = useState("");
+    const [purchaseRemarks, setPurchaseRemarks] = useState("");
+
+    // Form fields - Issue
+    const [issueDate, setIssueDate] = useState("");
+    const [issueProduct, setIssueProduct] = useState("");
+    const [issueQuantity, setIssueQuantity] = useState("");
+    const [issueUnit, setIssueUnit] = useState("kg");
+    const [issueLocation, setIssueLocation] = useState("");
+    const [landArea, setLandArea] = useState("");
+    const [issueRemarks, setIssueRemarks] = useState("");
 
     useEffect(() => {
         const fetchUserRole = async () => {
@@ -78,89 +92,203 @@ export default function AgriStore() {
         setTransactions(list.sort((a, b) => new Date(b.date) - new Date(a.date)));
     };
 
-    // Fetch unique products
+    // Fetch products from ledger_codes with category 'product' or from transactions
     const fetchProducts = async () => {
-        const querySnapshot = await getDocs(collection(db, "agristore_products"));
-        const productList = querySnapshot.docs.map((d) => d.data().name);
-        setProducts([...new Set(productList)]);
+        try {
+            // First try to get from ledger_codes
+            const ledgerQuery = query(
+                collection(db, "ledger_codes"), 
+                where("category", "==", "product")
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+            
+            if (!ledgerSnapshot.empty) {
+                const productList = ledgerSnapshot.docs.map(d => d.data().code);
+                setProducts([...new Set(productList)]);
+            } else {
+                // Fallback: get from existing transactions
+                const productList = transactions
+                    .map(t => t.productName)
+                    .filter(name => name && name.trim() !== "");
+                setProducts([...new Set(productList)]);
+            }
+        } catch (error) {
+            console.error("Error fetching products:", error);
+            // Fallback to transactions if ledger_codes fails
+            const productList = transactions
+                .map(t => t.productName)
+                .filter(name => name && name.trim() !== "");
+            setProducts([...new Set(productList)]);
+        }
     };
 
-    // Fetch unique locations
+    // Fetch locations from ledger_codes with category 'location'
     const fetchLocations = async () => {
-        const querySnapshot = await getDocs(collection(db, "agristore_locations"));
-        const locationList = querySnapshot.docs.map((d) => d.data().name);
-        setLocations([...new Set(locationList)]);
+        try {
+            const ledgerQuery = query(
+                collection(db, "ledger_codes"), 
+                where("category", "==", "location")
+            );
+            const ledgerSnapshot = await getDocs(ledgerQuery);
+            
+            if (!ledgerSnapshot.empty) {
+                const locationList = ledgerSnapshot.docs.map(d => d.data().code);
+                setLocations([...new Set(locationList)]);
+            } else {
+                // Fallback to default locations
+                setLocations(["Field A", "Field B", "Field C", "Greenhouse", "Storage"]);
+            }
+        } catch (error) {
+            console.error("Error fetching locations from ledgers:", error);
+            // Fallback to default locations if ledgers not available
+            setLocations(["Field A", "Field B", "Field C", "Greenhouse", "Storage"]);
+        }
     };
 
-    // Reset form
-    const resetForm = () => {
-        setDate("");
-        setTransactionType("stock_in");
-        setProductName("");
-        setQuantity("");
-        setUnit("kg");
-        setRate("");
-        setLocation("");
-        setLandArea("");
-        setRemarks("");
+    // Reset purchase form
+    const resetPurchaseForm = () => {
+        setPurchaseDate("");
+        setPurchaseProduct("");
+        setPurchaseQuantity("");
+        setPurchaseUnit("kg");
+        setPurchaseRate("");
         setSupplier("");
+        setPurchaseRemarks("");
     };
 
-    const handleSave = async () => {
-        if (!date || !productName || !quantity || !rate) {
+    // Reset issue form
+    const resetIssueForm = () => {
+        setIssueDate("");
+        setIssueProduct("");
+        setIssueQuantity("");
+        setIssueUnit("kg");
+        setIssueLocation("");
+        setLandArea("");
+        setIssueRemarks("");
+    };
+
+    // Calculate product-wise stock
+    const getProductStock = (productName) => {
+        const stockIn = transactions
+            .filter(t => t.transactionType === "stock_in" && t.productName === productName)
+            .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+
+        const stockOut = transactions
+            .filter(t => t.transactionType === "stock_out" && t.productName === productName)
+            .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+
+        return stockIn - stockOut;
+    };
+
+    // Calculate product-wise value
+    const getProductValue = (productName) => {
+        return transactions
+            .filter(t => t.transactionType === "stock_in" && t.productName === productName)
+            .reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+    };
+
+    // Get unique products with their stats
+    const productStats = [...new Set(transactions.map(t => t.productName))]
+        .filter(product => product && product.trim() !== "")
+        .map(product => ({
+            name: product,
+            stock: getProductStock(product),
+            value: getProductValue(product),
+            unit: transactions.find(t => t.productName === product)?.unit || "kg"
+        }))
+        .filter(product => product.stock > 0); // Only show products with stock
+
+    const handlePurchase = async () => {
+        if (!purchaseDate || !purchaseProduct || !purchaseQuantity || !purchaseRate) {
             alert("Please fill all required fields!");
             return;
         }
 
         const data = {
-            date,
-            transactionType,
-            productName,
-            quantity: Number(quantity),
-            unit,
-            rate: Number(rate),
-            totalAmount: Number(quantity) * Number(rate),
-            location: transactionType === "stock_out" ? location : "",
-            landArea: transactionType === "stock_out" ? landArea : "",
-            remarks,
-            supplier: transactionType === "stock_in" ? supplier : "",
+            date: purchaseDate,
+            transactionType: "stock_in",
+            productName: purchaseProduct,
+            quantity: Number(purchaseQuantity),
+            unit: purchaseUnit,
+            rate: Number(purchaseRate),
+            totalAmount: Number(purchaseQuantity) * Number(purchaseRate),
+            supplier,
+            remarks: purchaseRemarks,
             updatedAt: Timestamp.now(),
         };
 
         try {
-            if (editingId) {
-                await updateDoc(doc(db, "agristore_transactions", editingId), data);
-                alert("✅ Transaction updated successfully!");
-            } else {
-                await addDoc(collection(db, "agristore_transactions"), data);
-                alert("✅ Transaction saved successfully!");
-            }
+            await addDoc(collection(db, "agristore_transactions"), data);
+            alert("✅ Purchase recorded successfully!");
 
-            resetForm();
-            setShowForm(false);
-            setEditingId(null);
+            resetPurchaseForm();
+            setShowPurchaseForm(false);
             fetchTransactions();
-            fetchProducts();
-            fetchLocations();
+            fetchProducts(); // Refresh products list
         } catch (error) {
-            console.error("Error saving transaction:", error);
-            alert("❌ Failed to save transaction!");
+            console.error("Error saving purchase:", error);
+            alert("❌ Failed to save purchase!");
+        }
+    };
+
+    const handleIssue = async () => {
+        if (!issueDate || !issueProduct || !issueQuantity || !issueLocation) {
+            alert("Please fill all required fields!");
+            return;
+        }
+
+        const availableStock = getProductStock(issueProduct);
+        if (Number(issueQuantity) > availableStock) {
+            alert(`❌ Insufficient stock! Available: ${availableStock} ${issueUnit}`);
+            return;
+        }
+
+        const data = {
+            date: issueDate,
+            transactionType: "stock_out",
+            productName: issueProduct,
+            quantity: Number(issueQuantity),
+            unit: issueUnit,
+            location: issueLocation,
+            landArea,
+            remarks: issueRemarks,
+            updatedAt: Timestamp.now(),
+        };
+
+        try {
+            await addDoc(collection(db, "agristore_transactions"), data);
+            alert("✅ Issue recorded successfully!");
+
+            resetIssueForm();
+            setShowIssueForm(false);
+            fetchTransactions();
+        } catch (error) {
+            console.error("Error saving issue:", error);
+            alert("❌ Failed to save issue!");
         }
     };
 
     const handleEdit = (item) => {
         setEditingId(item.id);
-        setDate(item.date);
-        setTransactionType(item.transactionType);
-        setProductName(item.productName);
-        setQuantity(item.quantity);
-        setUnit(item.unit);
-        setRate(item.rate);
-        setLocation(item.location || "");
-        setLandArea(item.landArea || "");
-        setRemarks(item.remarks || "");
-        setSupplier(item.supplier || "");
-        setShowForm(true);
+        if (item.transactionType === "stock_in") {
+            setPurchaseDate(item.date);
+            setPurchaseProduct(item.productName);
+            setPurchaseQuantity(item.quantity);
+            setPurchaseUnit(item.unit);
+            setPurchaseRate(item.rate);
+            setSupplier(item.supplier || "");
+            setPurchaseRemarks(item.remarks || "");
+            setShowPurchaseForm(true);
+        } else {
+            setIssueDate(item.date);
+            setIssueProduct(item.productName);
+            setIssueQuantity(item.quantity);
+            setIssueUnit(item.unit);
+            setIssueLocation(item.location || "");
+            setLandArea(item.landArea || "");
+            setIssueRemarks(item.remarks || "");
+            setShowIssueForm(true);
+        }
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
@@ -191,7 +319,7 @@ export default function AgriStore() {
         return matchesSearch && matchesFilter && matchesProduct && matchesLocation && matchesDate;
     });
 
-    // Calculate stats
+    // Calculate overall stats
     const totalStockIn = transactions
         .filter(t => t.transactionType === "stock_in")
         .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
@@ -337,71 +465,125 @@ export default function AgriStore() {
                             <Download className="w-3 h-3" /> Download Report
                         </button>
 
-                        {/* ➕ Add / Close Form Button */}
+                        {/* 📥 Purchase Button */}
                         <button
                             onClick={() => {
                                 if (role === "read") return;
-                                if (!showForm) resetForm();
-                                setEditingId(null);
-                                setShowForm(!showForm);
+                                resetPurchaseForm();
+                                setShowPurchaseForm(true);
+                                setShowIssueForm(false);
                             }}
                             disabled={role === "read"}
                             className={`flex items-center gap-1 px-4 py-1.5 rounded-lg font-semibold shadow-md text-[12px] transition
                                 ${role === "read"
                                     ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                                    : showForm
-                                        ? "bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white"
-                                        : "bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white"
+                                    : "bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white"
                                 }`}
                         >
                             {role === "read" ? (
                                 <>
                                     <Lock className="w-3 h-3" /> Locked
                                 </>
-                            ) : showForm ? (
+                            ) : (
                                 <>
-                                    <X className="w-3 h-3" /> Close Form
+                                    <ShoppingCart className="w-3 h-3" /> New Purchase
+                                </>
+                            )}
+                        </button>
+
+                        {/* 📤 Issue Button */}
+                        <button
+                            onClick={() => {
+                                if (role === "read") return;
+                                resetIssueForm();
+                                setShowIssueForm(true);
+                                setShowPurchaseForm(false);
+                            }}
+                            disabled={role === "read"}
+                            className={`flex items-center gap-1 px-4 py-1.5 rounded-lg font-semibold shadow-md text-[12px] transition
+                                ${role === "read"
+                                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                    : "bg-gradient-to-r from-orange-500 to-orange-700 hover:from-orange-600 hover:to-orange-800 text-white"
+                                }`}
+                        >
+                            {role === "read" ? (
+                                <>
+                                    <Lock className="w-3 h-3" /> Locked
                                 </>
                             ) : (
                                 <>
-                                    <Plus className="w-3 h-3" /> New Transaction
+                                    <Truck className="w-3 h-3" /> Issue Stock
                                 </>
                             )}
                         </button>
                     </div>
                 </div>
 
-                {/* ✅ Stats Cards */}
+                {/* Info Banner about Ledger Integration */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-blue-600" />
+                        <div>
+                            <p className="text-[12px] font-semibold text-blue-800">
+                                Integrated with Ledger System
+                            </p>
+                            <p className="text-[11px] text-blue-600">
+                                • Products and Locations are managed through Ledger Manager
+                                • Create products with category "product" in Ledger Manager
+                                • Create locations with category "location" in Ledger Manager
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ✅ Product-wise Stats Cards */}
+                {productStats.length > 0 && (
+                    <div className="mb-8">
+                        <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <Package className="w-4 h-4" /> Product Stock Levels
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {productStats.map((product, index) => (
+                                <ProductStatCard 
+                                    key={index}
+                                    product={product}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* ✅ Overall Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-[12px]">
                     <StatCard 
-                        title="Current Stock" 
-                        value={`${currentStock} kg`} 
-                        icon={<Warehouse className="w-4 h-4 text-blue-600" />} 
+                        title="Total Stock In" 
+                        value={`${totalStockIn} kg`} 
+                        icon={<ArrowDownCircle className="w-4 h-4 text-blue-600" />} 
                         color="blue" 
                     />
                     <StatCard 
-                        title="Total Products" 
-                        value={uniqueProducts} 
-                        icon={<Package className="w-4 h-4 text-purple-600" />} 
-                        color="purple" 
+                        title="Total Stock Out" 
+                        value={`${totalStockOut} kg`} 
+                        icon={<ArrowUpCircle className="w-4 h-4 text-orange-600" />} 
+                        color="orange" 
                     />
                     <StatCard 
-                        title="Inventory Value" 
+                        title="Current Inventory Value" 
                         value={`Rs. ${totalValue.toLocaleString()}`} 
                         icon={<TrendingUp className="w-4 h-4 text-green-600" />} 
                         color="green" 
                     />
                     <StatCard 
-                        title="Stock Movements" 
-                        value={transactions.length} 
-                        icon={<BarChart3 className="w-4 h-4 text-orange-600" />} 
-                        color="orange" 
+                        title="Active Products" 
+                        value={uniqueProducts} 
+                        icon={<Package className="w-4 h-4 text-purple-600" />} 
+                        color="purple" 
                     />
                 </div>
 
-                {/* Form */}
-                {showForm && (
-                    <div className="bg-white rounded-2xl p-6 mb-4 shadow-lg border border-green-200 text-[12px] text-gray-800">
+                {/* 📥 Purchase Form */}
+                {showPurchaseForm && (
+                    <div className="bg-white rounded-2xl p-6 mb-4 shadow-lg border border-blue-200 text-[12px] text-gray-800">
                         <style>
                             {`
                                 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -416,33 +598,20 @@ export default function AgriStore() {
 
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-[12px] font-bold text-gray-900">
-                                {editingId ? "✏️ Edit Transaction" : "🛒 New Stock Transaction"}
+                                {editingId ? "✏️ Edit Purchase" : "📥 New Purchase"}
                             </h3>
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                            {/* Transaction Type */}
-                            <div>
-                                <label className="block font-semibold text-gray-700 mb-1">Transaction Type *</label>
-                                <select
-                                    value={transactionType}
-                                    onChange={(e) => setTransactionType(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
-                                >
-                                    <option value="stock_in">📥 Stock In (Purchase)</option>
-                                    <option value="stock_out">📤 Stock Out (Issue)</option>
-                                </select>
-                            </div>
-
                             {/* Date */}
                             <div className="relative">
                                 <label className="block font-semibold text-gray-700 mb-1">Date *</label>
                                 <input
                                     type="date"
-                                    value={date}
-                                    onChange={(e) => setDate(e.target.value)}
-                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 text-gray-700"
+                                    value={purchaseDate}
+                                    onChange={(e) => setPurchaseDate(e.target.value)}
+                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-700"
                                 />
                                 <Calendar className="absolute left-3 top-1/2 -translate-y-[10%] text-gray-400 w-4 h-4 pointer-events-none" />
                             </div>
@@ -450,13 +619,19 @@ export default function AgriStore() {
                             {/* Product Name */}
                             <div>
                                 <label className="block font-semibold text-gray-700 mb-1">Product Name *</label>
-                                <input
-                                    type="text"
-                                    value={productName}
-                                    onChange={(e) => setProductName(e.target.value)}
-                                    placeholder="e.g., Urea, DAP, Pesticide"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
-                                />
+                                <select
+                                    value={purchaseProduct}
+                                    onChange={(e) => setPurchaseProduct(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">Select Product</option>
+                                    {products.map((product, index) => (
+                                        <option key={index} value={product}>{product}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-gray-500 mt-1">
+                                    Products are managed in Ledger Manager (category: product)
+                                </p>
                             </div>
 
                             {/* Quantity & Unit */}
@@ -465,15 +640,15 @@ export default function AgriStore() {
                                 <div className="flex gap-2">
                                     <input
                                         type="number"
-                                        value={quantity}
-                                        onChange={(e) => setQuantity(e.target.value)}
+                                        value={purchaseQuantity}
+                                        onChange={(e) => setPurchaseQuantity(e.target.value)}
                                         placeholder="0"
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                                     />
                                     <select
-                                        value={unit}
-                                        onChange={(e) => setUnit(e.target.value)}
-                                        className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                                        value={purchaseUnit}
+                                        onChange={(e) => setPurchaseUnit(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="kg">kg</option>
                                         <option value="g">g</option>
@@ -490,82 +665,196 @@ export default function AgriStore() {
                                 <label className="block font-semibold text-gray-700 mb-1">Rate (Rs.) *</label>
                                 <input
                                     type="number"
-                                    value={rate}
-                                    onChange={(e) => setRate(e.target.value)}
+                                    value={purchaseRate}
+                                    onChange={(e) => setPurchaseRate(e.target.value)}
                                     placeholder="Price per unit"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
 
-                            {/* Conditional Fields */}
-                            {transactionType === "stock_in" ? (
-                                <div>
-                                    <label className="block font-semibold text-gray-700 mb-1">Supplier</label>
-                                    <input
-                                        type="text"
-                                        value={supplier}
-                                        onChange={(e) => setSupplier(e.target.value)}
-                                        placeholder="Supplier name"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
-                                    />
-                                </div>
-                            ) : (
-                                <>
-                                    <div>
-                                        <label className="block font-semibold text-gray-700 mb-1">Location *</label>
-                                        <input
-                                            type="text"
-                                            value={location}
-                                            onChange={(e) => setLocation(e.target.value)}
-                                            placeholder="Field/Land location"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block font-semibold text-gray-700 mb-1">Land Area</label>
-                                        <input
-                                            type="text"
-                                            value={landArea}
-                                            onChange={(e) => setLandArea(e.target.value)}
-                                            placeholder="e.g., 2 acres"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
-                                        />
-                                    </div>
-                                </>
-                            )}
+                            {/* Supplier */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Supplier</label>
+                                <input
+                                    type="text"
+                                    value={supplier}
+                                    onChange={(e) => setSupplier(e.target.value)}
+                                    placeholder="Supplier name"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
 
                             {/* Remarks */}
                             <div className="lg:col-span-3">
                                 <label className="block font-semibold text-gray-700 mb-1">Remarks</label>
                                 <input
                                     type="text"
-                                    value={remarks}
-                                    onChange={(e) => setRemarks(e.target.value)}
+                                    value={purchaseRemarks}
+                                    onChange={(e) => setPurchaseRemarks(e.target.value)}
                                     placeholder="Additional notes..."
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                         </div>
 
                         {/* Total Amount Display */}
-                        {quantity && rate && (
-                            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl">
-                                <p className="text-green-800 font-semibold">
-                                    Total Amount: Rs. {(Number(quantity) * Number(rate)).toLocaleString()}
+                        {purchaseQuantity && purchaseRate && (
+                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                                <p className="text-blue-800 font-semibold">
+                                    Total Amount: Rs. {(Number(purchaseQuantity) * Number(purchaseRate)).toLocaleString()}
                                 </p>
                             </div>
                         )}
 
                         <div className="flex gap-3">
                             <button
-                                onClick={handleSave}
-                                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300"
+                                onClick={handlePurchase}
+                                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300"
                             >
                                 <Save className="w-4 h-4" /> 
-                                {editingId ? "Update Transaction" : "Save Transaction"}
+                                {editingId ? "Update Purchase" : "Save Purchase"}
                             </button>
                             <button
-                                onClick={() => setShowForm(false)}
+                                onClick={() => setShowPurchaseForm(false)}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* 📤 Issue Form */}
+                {showIssueForm && (
+                    <div className="bg-white rounded-2xl p-6 mb-4 shadow-lg border border-orange-200 text-[12px] text-gray-800">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-[12px] font-bold text-gray-900">
+                                {editingId ? "✏️ Edit Issue" : "📤 Issue Stock"}
+                            </h3>
+                            <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse"></div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                            {/* Date */}
+                            <div className="relative">
+                                <label className="block font-semibold text-gray-700 mb-1">Date *</label>
+                                <input
+                                    type="date"
+                                    value={issueDate}
+                                    onChange={(e) => setIssueDate(e.target.value)}
+                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 text-gray-700"
+                                />
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-[10%] text-gray-400 w-4 h-4 pointer-events-none" />
+                            </div>
+
+                            {/* Product Name */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Product *</label>
+                                <select
+                                    value={issueProduct}
+                                    onChange={(e) => setIssueProduct(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">Select Product</option>
+                                    {productStats.map((product, index) => (
+                                        <option key={index} value={product.name}>
+                                            {product.name} (Available: {product.stock} {product.unit})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-gray-500 mt-1">
+                                    Only products with available stock are shown
+                                </p>
+                            </div>
+
+                            {/* Quantity & Unit */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Quantity *</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="number"
+                                        value={issueQuantity}
+                                        onChange={(e) => setIssueQuantity(e.target.value)}
+                                        placeholder="0"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                    />
+                                    <select
+                                        value={issueUnit}
+                                        onChange={(e) => setIssueUnit(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                    >
+                                        <option value="kg">kg</option>
+                                        <option value="g">g</option>
+                                        <option value="l">l</option>
+                                        <option value="ml">ml</option>
+                                        <option value="bag">bag</option>
+                                        <option value="unit">unit</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Location */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Issue To (Location) *</label>
+                                <select
+                                    value={issueLocation}
+                                    onChange={(e) => setIssueLocation(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">Select Location</option>
+                                    {locations.map((location, index) => (
+                                        <option key={index} value={location}>{location}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-gray-500 mt-1">
+                                    Locations are managed in Ledger Manager (category: location)
+                                </p>
+                            </div>
+
+                            {/* Land Area */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Land Area</label>
+                                <input
+                                    type="text"
+                                    value={landArea}
+                                    onChange={(e) => setLandArea(e.target.value)}
+                                    placeholder="e.g., 2 acres"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+
+                            {/* Remarks */}
+                            <div className="lg:col-span-3">
+                                <label className="block font-semibold text-gray-700 mb-1">Remarks</label>
+                                <input
+                                    type="text"
+                                    value={issueRemarks}
+                                    onChange={(e) => setIssueRemarks(e.target.value)}
+                                    placeholder="Purpose of issue..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Available Stock Display */}
+                        {issueProduct && (
+                            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+                                <p className="text-orange-800 font-semibold">
+                                    Available Stock: {getProductStock(issueProduct)} {issueUnit}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleIssue}
+                                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white font-semibold rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-300"
+                            >
+                                <Save className="w-4 h-4" /> 
+                                {editingId ? "Update Issue" : "Save Issue"}
+                            </button>
+                            <button
+                                onClick={() => setShowIssueForm(false)}
                                 className="px-6 py-2 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
                             >
                                 Cancel
@@ -679,19 +968,22 @@ export default function AgriStore() {
                                             <td className="px-6 py-2">
                                                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
                                                     t.transactionType === "stock_in" 
-                                                        ? "bg-green-100 text-green-800" 
-                                                        : "bg-blue-100 text-blue-800"
+                                                        ? "bg-blue-100 text-blue-800" 
+                                                        : "bg-orange-100 text-orange-800"
                                                 }`}>
-                                                    {t.transactionType === "stock_in" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                                    {t.transactionType === "stock_in" ? "Stock In" : "Stock Out"}
+                                                    {t.transactionType === "stock_in" ? 
+                                                        <ArrowDownCircle className="w-3 h-3" /> : 
+                                                        <ArrowUpCircle className="w-3 h-3" />
+                                                    }
+                                                    {t.transactionType === "stock_in" ? "Purchase" : "Issue"}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-2 font-semibold text-gray-900">{t.productName}</td>
                                             <td className="px-6 py-2">
                                                 {t.quantity} {t.unit}
                                             </td>
-                                            <td className="px-6 py-2 text-right">{t.rate}</td>
-                                            <td className="px-6 py-2 text-right font-semibold">{t.totalAmount}</td>
+                                            <td className="px-6 py-2 text-right">{t.rate || "-"}</td>
+                                            <td className="px-6 py-2 text-right font-semibold">{t.totalAmount || "-"}</td>
                                             <td className="px-6 py-2">{t.location || "-"}</td>
                                             <td className="px-6 py-2">{t.landArea || "-"}</td>
                                             <td className="px-6 py-2">{t.remarks || "-"}</td>
@@ -750,6 +1042,42 @@ function StatCard({ title, value, icon, color }) {
                     <p className="text-[12px] font-bold text-gray-900 mt-1">{value}</p>
                 </div>
                 <div className={`p-3 bg-${color}-100 rounded-xl`}>{icon}</div>
+            </div>
+        </div>
+    );
+}
+
+// Product-specific Stat Card
+function ProductStatCard({ product }) {
+    return (
+        <div className="bg-white rounded-2xl p-4 shadow-lg border border-green-100 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[12px] font-bold text-gray-900 truncate">{product.name}</h4>
+                <Package className="w-4 h-4 text-green-600" />
+            </div>
+            <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-600">Current Stock:</span>
+                    <span className="text-[11px] font-bold text-gray-900">
+                        {product.stock} {product.unit}
+                    </span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-600">Value:</span>
+                    <span className="text-[11px] font-bold text-green-600">
+                        Rs. {product.value.toLocaleString()}
+                    </span>
+                </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-gray-100">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                        style={{ 
+                            width: `${Math.min((product.stock / (product.stock + 100)) * 100, 100)}%` 
+                        }}
+                    ></div>
+                </div>
             </div>
         </div>
     );
