@@ -18,6 +18,8 @@ export default function VehicalManager() {
     const [showForm, setShowForm] = useState(false);
     const [vehicleNumber, setVehicleNumber] = useState("");
     const [vehicleType, setVehicleType] = useState("Tractor");
+    const [customVehicleType, setCustomVehicleType] = useState("");
+    const [showCustomVehicleType, setShowCustomVehicleType] = useState(false);
     const [model, setModel] = useState("");
     const [brand, setBrand] = useState("");
     const [price, setPrice] = useState("");
@@ -143,6 +145,8 @@ export default function VehicalManager() {
     const resetForm = () => {
         setVehicleNumber("");
         setVehicleType("Tractor");
+        setCustomVehicleType("");
+        setShowCustomVehicleType(false);
         setModel("");
         setBrand("");
         setPrice("");
@@ -159,7 +163,10 @@ export default function VehicalManager() {
     };
 
     const handleSave = async () => {
-        if (!vehicleNumber || !vehicleType || !model || !price) {
+        // Use custom vehicle type if shown and filled, otherwise use selected vehicle type
+        const finalVehicleType = showCustomVehicleType && customVehicleType ? customVehicleType : vehicleType;
+        
+        if (!vehicleNumber || !finalVehicleType || !model || !price) {
             alert("Please fill required fields (Vehicle Number, Type, Model, and Price).");
             return;
         }
@@ -176,7 +183,7 @@ export default function VehicalManager() {
 
             const vehicleData = {
                 vehicleNumber,
-                vehicleType,
+                vehicleType: finalVehicleType,
                 model,
                 brand: brand || "",
                 price: Number(price),
@@ -223,7 +230,19 @@ export default function VehicalManager() {
     const handleEdit = (vehicle) => {
         setEditingId(vehicle.id);
         setVehicleNumber(vehicle.vehicleNumber || "");
-        setVehicleType(vehicle.vehicleType || "Tractor");
+        
+        // Check if vehicle type is in the predefined list
+        const isCustomType = !vehicleTypes.includes(vehicle.vehicleType);
+        if (isCustomType) {
+            setVehicleType("Other");
+            setCustomVehicleType(vehicle.vehicleType);
+            setShowCustomVehicleType(true);
+        } else {
+            setVehicleType(vehicle.vehicleType || "Tractor");
+            setCustomVehicleType("");
+            setShowCustomVehicleType(false);
+        }
+        
         setModel(vehicle.model || "");
         setBrand(vehicle.brand || "");
         setPrice(vehicle.price != null ? String(vehicle.price) : "");
@@ -255,11 +274,23 @@ export default function VehicalManager() {
         }
     };
 
+    const handleVehicleTypeChange = (value) => {
+        setVehicleType(value);
+        if (value === "Other") {
+            setShowCustomVehicleType(true);
+            setCustomVehicleType("");
+        } else {
+            setShowCustomVehicleType(false);
+            setCustomVehicleType("");
+        }
+    };
+
     const filteredVehicles = vehicles.filter((v) => {
         const matchesSearch =
             v.vehicleNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             v.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.brand?.toLowerCase().includes(searchTerm.toLowerCase());
+            v.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            v.vehicleType?.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesOwnership =
             ownershipFilter === "all" || v.ownershipType === ownershipFilter;
@@ -274,6 +305,9 @@ export default function VehicalManager() {
 
         return matchesSearch && matchesOwnership && matchesAllocation && matchesType;
     });
+
+    // Get all unique vehicle types for filter (including custom ones)
+    const allVehicleTypes = [...new Set(vehicles.map(v => v.vehicleType))].sort();
 
     const stats = {
         total: vehicles.length,
@@ -360,7 +394,7 @@ export default function VehicalManager() {
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                             <input
                                 type="text"
-                                placeholder="Search vehicles by number, model or brand..."
+                                placeholder="Search vehicles by number, model, brand or type..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-800"
@@ -376,7 +410,7 @@ export default function VehicalManager() {
                                 className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-800"
                             >
                                 <option value="all">All Types</option>
-                                {vehicleTypes.map(type => (
+                                {allVehicleTypes.map(type => (
                                     <option key={type} value={type}>{type}</option>
                                 ))}
                             </select>
@@ -436,13 +470,30 @@ export default function VehicalManager() {
                                 <label className="block text-gray-800">Vehicle Type <span className="text-red-500">*</span></label>
                                 <select
                                     value={vehicleType}
-                                    onChange={(e) => setVehicleType(e.target.value)}
+                                    onChange={(e) => handleVehicleTypeChange(e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-800"
                                 >
                                     {vehicleTypes.map(type => (
                                         <option key={type} value={type}>{type}</option>
                                     ))}
                                 </select>
+                                
+                                {/* Custom Vehicle Type Input */}
+                                {showCustomVehicleType && (
+                                    <div className="mt-2">
+                                        <label className="block text-gray-800 text-sm mb-1">Custom Vehicle Type</label>
+                                        <input
+                                            type="text"
+                                            value={customVehicleType}
+                                            onChange={(e) => setCustomVehicleType(e.target.value)}
+                                            placeholder="Enter custom vehicle type"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Enter your own vehicle type if not in the list
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                             {/* Model */}
                             <div>
@@ -643,7 +694,16 @@ export default function VehicalManager() {
                                 <tr key={vehicle.id} className="hover:bg-green-50 transition-all">
                                     <td className="px-4 py-2 border-b border-gray-200">{idx + 1}</td>
                                     <td className="px-4 py-2 border-b border-gray-200 font-semibold">{vehicle.vehicleNumber}</td>
-                                    <td className="px-4 py-2 border-b border-gray-200">{vehicle.vehicleType}</td>
+                                    <td className="px-4 py-2 border-b border-gray-200">
+                                        <span className={`px-2 py-1 rounded-full text-xs ${
+                                            !vehicleTypes.includes(vehicle.vehicleType) 
+                                                ? "bg-blue-100 text-blue-800 border border-blue-300" 
+                                                : "bg-gray-100 text-gray-800"
+                                        }`}>
+                                            {vehicle.vehicleType}
+                                            {!vehicleTypes.includes(vehicle.vehicleType) && " ✏️"}
+                                        </span>
+                                    </td>
                                     <td className="px-4 py-2 border-b border-gray-200">{vehicle.model}</td>
                                     <td className="px-4 py-2 border-b border-gray-200">{vehicle.brand || "—"}</td>
                                     <td className="px-4 py-2 border-b border-gray-200">{vehicle.ownershipType}</td>
