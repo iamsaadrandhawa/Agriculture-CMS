@@ -61,8 +61,6 @@ export default function AgriStore() {
     const [purchaseRate, setPurchaseRate] = useState("");
     const [supplier, setSupplier] = useState("");
     const [purchaseRemarks, setPurchaseRemarks] = useState("");
-
-    // Form fields - Issue
     const [issueDate, setIssueDate] = useState("");
     const [issueProduct, setIssueProduct] = useState("");
     const [issueQuantity, setIssueQuantity] = useState("");
@@ -78,22 +76,23 @@ export default function AgriStore() {
         };
         fetchUserRole();
         fetchTransactions();
-        fetchProducts();
-        fetchLocations();
     }, []);
 
-    // Fetch transactions
+    // Fetch transactions and update products/locations
     const fetchTransactions = async () => {
         const querySnapshot = await getDocs(collection(db, "agristore_transactions"));
         const list = querySnapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
         }));
-        setTransactions(list.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        const sortedList = list.sort((a, b) => new Date(b.date) - new Date(a.date));
+        setTransactions(sortedList);
+        fetchProducts(sortedList);
+        fetchLocations(sortedList);
     };
 
     // Fetch products from ledger_codes with category 'product' or from transactions
-    const fetchProducts = async () => {
+    const fetchProducts = async (transactionsList = transactions) => {
         try {
             // First try to get from ledger_codes
             const ledgerQuery = query(
@@ -107,7 +106,7 @@ export default function AgriStore() {
                 setProducts([...new Set(productList)]);
             } else {
                 // Fallback: get from existing transactions
-                const productList = transactions
+                const productList = transactionsList
                     .map(t => t.productName)
                     .filter(name => name && name.trim() !== "");
                 setProducts([...new Set(productList)]);
@@ -115,7 +114,7 @@ export default function AgriStore() {
         } catch (error) {
             console.error("Error fetching products:", error);
             // Fallback to transactions if ledger_codes fails
-            const productList = transactions
+            const productList = transactionsList
                 .map(t => t.productName)
                 .filter(name => name && name.trim() !== "");
             setProducts([...new Set(productList)]);
@@ -123,7 +122,7 @@ export default function AgriStore() {
     };
 
     // Fetch locations from ledger_codes with category 'location'
-    const fetchLocations = async () => {
+    const fetchLocations = async (transactionsList = transactions) => {
         try {
             const ledgerQuery = query(
                 collection(db, "ledger_codes"), 
@@ -135,13 +134,19 @@ export default function AgriStore() {
                 const locationList = ledgerSnapshot.docs.map(d => d.data().code);
                 setLocations([...new Set(locationList)]);
             } else {
-                // Fallback to default locations
-                setLocations(["Field A", "Field B", "Field C", "Greenhouse", "Storage"]);
+                // Fallback: get from existing transactions
+                const locationList = transactionsList
+                    .map(t => t.location)
+                    .filter(location => location && location.trim() !== "");
+                setLocations([...new Set(locationList)]);
             }
         } catch (error) {
             console.error("Error fetching locations from ledgers:", error);
-            // Fallback to default locations if ledgers not available
-            setLocations(["Field A", "Field B", "Field C", "Greenhouse", "Storage"]);
+            // Fallback to transactions if ledgers not available
+            const locationList = transactionsList
+                .map(t => t.location)
+                .filter(location => location && location.trim() !== "");
+            setLocations([...new Set(locationList)]);
         }
     };
 
@@ -154,6 +159,7 @@ export default function AgriStore() {
         setPurchaseRate("");
         setSupplier("");
         setPurchaseRemarks("");
+        setEditingId(null);
     };
 
     // Reset issue form
@@ -165,9 +171,10 @@ export default function AgriStore() {
         setIssueLocation("");
         setLandArea("");
         setIssueRemarks("");
+        setEditingId(null);
     };
 
-    // Calculate product-wise stock
+    // Calculate product-wise stock (FIXED)
     const getProductStock = (productName) => {
         const stockIn = transactions
             .filter(t => t.transactionType === "stock_in" && t.productName === productName)
@@ -180,11 +187,39 @@ export default function AgriStore() {
         return stockIn - stockOut;
     };
 
-    // Calculate product-wise value
+    // Calculate product-wise current value (FIXED - FIFO method)
     const getProductValue = (productName) => {
-        return transactions
+        // Get all purchase transactions for this product
+        const purchases = transactions
             .filter(t => t.transactionType === "stock_in" && t.productName === productName)
-            .reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+            .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date (FIFO)
+        
+        // Calculate remaining stock
+        const remainingStock = getProductStock(productName);
+        
+        if (remainingStock <= 0) return 0;
+        
+        let remainingValue = 0;
+        let tempStock = remainingStock;
+        
+        // Work backwards through purchases to calculate value of remaining stock (FIFO)
+        for (let i = purchases.length - 1; i >= 0 && tempStock > 0; i--) {
+            const purchase = purchases[i];
+            const purchaseQuantity = Number(purchase.quantity || 0);
+            const purchaseRate = Number(purchase.rate || 0);
+            
+            if (tempStock >= purchaseQuantity) {
+                // Use entire purchase
+                remainingValue += purchaseQuantity * purchaseRate;
+                tempStock -= purchaseQuantity;
+            } else {
+                // Use partial purchase
+                remainingValue += tempStock * purchaseRate;
+                tempStock = 0;
+            }
+        }
+        
+        return remainingValue;
     };
 
     // Get unique products with their stats
@@ -218,13 +253,17 @@ export default function AgriStore() {
         };
 
         try {
-            await addDoc(collection(db, "agristore_transactions"), data);
-            alert("✅ Purchase recorded successfully!");
+            if (editingId) {
+                await updateDoc(doc(db, "agristore_transactions", editingId), data);
+                alert("✅ Purchase updated successfully!");
+            } else {
+                await addDoc(collection(db, "agristore_transactions"), data);
+                alert("✅ Purchase recorded successfully!");
+            }
 
             resetPurchaseForm();
             setShowPurchaseForm(false);
             fetchTransactions();
-            fetchProducts(); // Refresh products list
         } catch (error) {
             console.error("Error saving purchase:", error);
             alert("❌ Failed to save purchase!");
@@ -243,21 +282,52 @@ export default function AgriStore() {
             return;
         }
 
+        // Calculate the value of the issued stock (FIFO method)
+        const issuedQuantity = Number(issueQuantity);
+        let remainingToIssue = issuedQuantity;
+        let issuedValue = 0;
+        
+        // Get all purchase transactions sorted by date (oldest first for FIFO)
+        const purchases = transactions
+            .filter(t => t.transactionType === "stock_in" && t.productName === issueProduct)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Calculate value using FIFO
+        for (const purchase of purchases) {
+            if (remainingToIssue <= 0) break;
+            
+            const purchaseQuantity = Number(purchase.quantity || 0);
+            const purchaseRate = Number(purchase.rate || 0);
+            const availableFromPurchase = purchaseQuantity;
+            
+            if (availableFromPurchase > 0) {
+                const quantityToUse = Math.min(remainingToIssue, availableFromPurchase);
+                issuedValue += quantityToUse * purchaseRate;
+                remainingToIssue -= quantityToUse;
+            }
+        }
+
         const data = {
             date: issueDate,
             transactionType: "stock_out",
             productName: issueProduct,
-            quantity: Number(issueQuantity),
+            quantity: issuedQuantity,
             unit: issueUnit,
             location: issueLocation,
             landArea,
             remarks: issueRemarks,
+            issuedValue: issuedValue, // Store the value of issued stock
             updatedAt: Timestamp.now(),
         };
 
         try {
-            await addDoc(collection(db, "agristore_transactions"), data);
-            alert("✅ Issue recorded successfully!");
+            if (editingId) {
+                await updateDoc(doc(db, "agristore_transactions", editingId), data);
+                alert("✅ Issue updated successfully!");
+            } else {
+                await addDoc(collection(db, "agristore_transactions"), data);
+                alert(`✅ Issue recorded successfully! Issued value: Rs. ${issuedValue.toLocaleString()}`);
+            }
 
             resetIssueForm();
             setShowIssueForm(false);
@@ -279,6 +349,7 @@ export default function AgriStore() {
             setSupplier(item.supplier || "");
             setPurchaseRemarks(item.remarks || "");
             setShowPurchaseForm(true);
+            setShowIssueForm(false);
         } else {
             setIssueDate(item.date);
             setIssueProduct(item.productName);
@@ -288,14 +359,21 @@ export default function AgriStore() {
             setLandArea(item.landArea || "");
             setIssueRemarks(item.remarks || "");
             setShowIssueForm(true);
+            setShowPurchaseForm(false);
         }
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const handleDelete = async (id) => {
         if (!confirm("Are you sure you want to delete this transaction?")) return;
-        await deleteDoc(doc(db, "agristore_transactions", id));
-        fetchTransactions();
+        try {
+            await deleteDoc(doc(db, "agristore_transactions", id));
+            alert("✅ Transaction deleted successfully!");
+            fetchTransactions();
+        } catch (error) {
+            console.error("Error deleting transaction:", error);
+            alert("❌ Failed to delete transaction!");
+        }
     };
 
     // Filter transactions
@@ -330,9 +408,15 @@ export default function AgriStore() {
 
     const currentStock = totalStockIn - totalStockOut;
 
-    const totalValue = transactions
+    const totalPurchaseValue = transactions
         .filter(t => t.transactionType === "stock_in")
         .reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+
+    const totalIssuedValue = transactions
+        .filter(t => t.transactionType === "stock_out")
+        .reduce((sum, t) => sum + Number(t.issuedValue || 0), 0);
+
+    const currentInventoryValue = totalPurchaseValue - totalIssuedValue;
 
     const uniqueProducts = [...new Set(transactions.map(t => t.productName))].length;
 
@@ -357,7 +441,7 @@ export default function AgriStore() {
             doc.setFont("helvetica", "bold");
             doc.setFontSize(16);
             doc.setTextColor(34, 139, 34);
-            doc.text("AgriStore Inventory Report", 40, 50);
+            doc.text("AGRICULTURE CMS Inventory Report", 40, 50);
 
             doc.setFontSize(10);
             doc.setTextColor(60, 60, 60);
@@ -371,7 +455,7 @@ export default function AgriStore() {
             
             doc.text(`Current Stock: ${currentStock} kg`, pageWidth - 200, 50);
             doc.text(`Total Products: ${uniqueProducts}`, pageWidth - 200, 65);
-            doc.text(`Inventory Value: Rs. ${totalValue.toLocaleString()}`, pageWidth - 200, 80);
+            doc.text(`Inventory Value: Rs. ${currentInventoryValue.toLocaleString()}`, pageWidth - 200, 80);
 
             let startY = 100;
 
@@ -406,7 +490,7 @@ export default function AgriStore() {
                         t.transactionType === "stock_in" ? "Stock In" : "Stock Out",
                         `${t.quantity} ${t.unit}`,
                         t.rate || "—",
-                        t.totalAmount || "—",
+                        t.totalAmount || t.issuedValue || "—",
                         t.location || "—",
                         t.landArea || "—",
                         t.remarks || "—"
@@ -434,12 +518,12 @@ export default function AgriStore() {
             doc.setFontSize(10);
             doc.setTextColor(100, 100, 100);
             doc.text(
-                "Generated by AgriStore Management System " + new Date().getFullYear(),
+                "Generated by AGRICULTURE-CMS Management System " + new Date().getFullYear(),
                 40,
                 doc.internal.pageSize.height - 20
             );
 
-            doc.save("AgriStore_Inventory_Report.pdf");
+            doc.save("AGRICULTURE-CMS_Inventory_Report.pdf");
         } catch (error) {
             console.error("Failed to generate PDF:", error);
             alert("Failed to generate report. Check console for details.");
@@ -557,19 +641,19 @@ export default function AgriStore() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-[12px]">
                     <StatCard 
                         title="Total Stock In" 
-                        value={`${totalStockIn} kg`} 
+                        value={`${totalStockIn} `} 
                         icon={<ArrowDownCircle className="w-4 h-4 text-blue-600" />} 
                         color="blue" 
                     />
                     <StatCard 
                         title="Total Stock Out" 
-                        value={`${totalStockOut} kg`} 
+                        value={`${totalStockOut} `} 
                         icon={<ArrowUpCircle className="w-4 h-4 text-orange-600" />} 
                         color="orange" 
                     />
                     <StatCard 
                         title="Current Inventory Value" 
-                        value={`Rs. ${totalValue.toLocaleString()}`} 
+                        value={`Rs. ${currentInventoryValue.toLocaleString()}`} 
                         icon={<TrendingUp className="w-4 h-4 text-green-600" />} 
                         color="green" 
                     />
@@ -715,7 +799,10 @@ export default function AgriStore() {
                                 {editingId ? "Update Purchase" : "Save Purchase"}
                             </button>
                             <button
-                                onClick={() => setShowPurchaseForm(false)}
+                                onClick={() => {
+                                    setShowPurchaseForm(false);
+                                    resetPurchaseForm();
+                                }}
                                 className="px-6 py-2 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
                             >
                                 Cancel
@@ -791,6 +878,19 @@ export default function AgriStore() {
                                         <option value="unit">unit</option>
                                     </select>
                                 </div>
+                                {/* Stock validation message */}
+                                {issueProduct && issueQuantity && (
+                                    <div className={`mt-2 p-2 rounded-lg text-[11px] font-semibold ${
+                                        Number(issueQuantity) > getProductStock(issueProduct) 
+                                            ? 'bg-red-100 text-red-700' 
+                                            : 'bg-green-100 text-green-700'
+                                    }`}>
+                                        {Number(issueQuantity) > getProductStock(issueProduct) 
+                                            ? `⚠️ Exceeds available stock by ${Number(issueQuantity) - getProductStock(issueProduct)} ${issueUnit}`
+                                            : `✓ Stock available: ${getProductStock(issueProduct)} ${issueUnit}`
+                                        }
+                                    </div>
+                                )}
                             </div>
 
                             {/* Location */}
@@ -842,19 +942,30 @@ export default function AgriStore() {
                                 <p className="text-orange-800 font-semibold">
                                     Available Stock: {getProductStock(issueProduct)} {issueUnit}
                                 </p>
+                                <p className="text-orange-700 text-[11px] mt-1">
+                                    Current Value: Rs. {getProductValue(issueProduct).toLocaleString()}
+                                </p>
                             </div>
                         )}
 
                         <div className="flex gap-3">
                             <button
                                 onClick={handleIssue}
-                                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white font-semibold rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-300"
+                                disabled={issueProduct && issueQuantity && Number(issueQuantity) > getProductStock(issueProduct)}
+                                className={`flex items-center gap-2 px-6 py-2 font-semibold rounded-xl transition-all duration-300 ${
+                                    issueProduct && issueQuantity && Number(issueQuantity) > getProductStock(issueProduct)
+                                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                        : "bg-gradient-to-r from-orange-600 to-orange-700 text-white hover:from-orange-700 hover:to-orange-800"
+                                }`}
                             >
                                 <Save className="w-4 h-4" /> 
                                 {editingId ? "Update Issue" : "Save Issue"}
                             </button>
                             <button
-                                onClick={() => setShowIssueForm(false)}
+                                onClick={() => {
+                                    setShowIssueForm(false);
+                                    resetIssueForm();
+                                }}
                                 className="px-6 py-2 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
                             >
                                 Cancel
@@ -983,7 +1094,9 @@ export default function AgriStore() {
                                                 {t.quantity} {t.unit}
                                             </td>
                                             <td className="px-6 py-2 text-right">{t.rate || "-"}</td>
-                                            <td className="px-6 py-2 text-right font-semibold">{t.totalAmount || "-"}</td>
+                                            <td className="px-6 py-2 text-right font-semibold">
+                                                {t.totalAmount || t.issuedValue || "-"}
+                                            </td>
                                             <td className="px-6 py-2">{t.location || "-"}</td>
                                             <td className="px-6 py-2">{t.landArea || "-"}</td>
                                             <td className="px-6 py-2">{t.remarks || "-"}</td>
@@ -1034,14 +1147,28 @@ export default function AgriStore() {
 
 // 🔧 Reusable Components
 function StatCard({ title, value, icon, color }) {
+    const colorClasses = {
+        blue: "border-blue-100",
+        orange: "border-orange-100", 
+        green: "border-green-100",
+        purple: "border-purple-100"
+    };
+
+    const bgColorClasses = {
+        blue: "bg-blue-100",
+        orange: "bg-orange-100",
+        green: "bg-green-100", 
+        purple: "bg-purple-100"
+    };
+
     return (
-        <div className={`bg-white rounded-2xl p-6 shadow-lg border border-${color}-100`}>
+        <div className={`bg-white rounded-2xl p-6 shadow-lg border ${colorClasses[color]}`}>
             <div className="flex items-center justify-between">
                 <div>
                     <p className="text-[12px] font-medium text-gray-600">{title}</p>
                     <p className="text-[12px] font-bold text-gray-900 mt-1">{value}</p>
                 </div>
-                <div className={`p-3 bg-${color}-100 rounded-xl`}>{icon}</div>
+                <div className={`p-3 ${bgColorClasses[color]} rounded-xl`}>{icon}</div>
             </div>
         </div>
     );
@@ -1049,11 +1176,15 @@ function StatCard({ title, value, icon, color }) {
 
 // Product-specific Stat Card
 function ProductStatCard({ product }) {
+    const stockPercentage = Math.min((product.stock / (product.stock + 50)) * 100, 100);
+    
     return (
         <div className="bg-white rounded-2xl p-4 shadow-lg border border-green-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[12px] font-bold text-gray-900 truncate">{product.name}</h4>
-                <Package className="w-4 h-4 text-green-600" />
+                <h4 className="text-[12px] font-bold text-gray-900 truncate" title={product.name}>
+                    {product.name}
+                </h4>
+                <Package className="w-4 h-4 text-green-600 flex-shrink-0" />
             </div>
             <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -1063,19 +1194,24 @@ function ProductStatCard({ product }) {
                     </span>
                 </div>
                 <div className="flex justify-between items-center">
-                    <span className="text-[11px] text-gray-600">Value:</span>
+                    <span className="text-[11px] text-gray-600">Current Value:</span>
                     <span className="text-[11px] font-bold text-green-600">
                         Rs. {product.value.toLocaleString()}
                     </span>
                 </div>
             </div>
             <div className="mt-3 pt-2 border-t border-gray-100">
+                <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+                    <span>Stock Level</span>
+                    <span>{Math.round(stockPercentage)}%</span>
+                </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
-                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                        style={{ 
-                            width: `${Math.min((product.stock / (product.stock + 100)) * 100, 100)}%` 
-                        }}
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                            stockPercentage > 70 ? 'bg-green-500' : 
+                            stockPercentage > 30 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${stockPercentage}%` }}
                     ></div>
                 </div>
             </div>
