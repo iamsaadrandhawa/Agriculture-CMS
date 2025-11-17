@@ -12,7 +12,10 @@ import {
   LogOut,
   ChevronDown,
   Warehouse,
+  ExternalLink,
+  MessageCircle,
 } from "lucide-react";
+import "./Dropdown.css";
 
 // Import modular sections
 import DailyTransactions from "./DailyTransactions";
@@ -129,26 +132,26 @@ export default function Dashboard() {
 
   const getColorClasses = (color, isActive) => {
     const colorMap = {
-      green: isActive ? 
-        "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg" : 
+      green: isActive ?
+        "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg" :
         "text-gray-700 hover:bg-green-50 hover:text-green-600",
-      red: isActive ? 
-        "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg" : 
+      red: isActive ?
+        "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg" :
         "text-gray-700 hover:bg-red-50 hover:text-red-600",
-      blue: isActive ? 
-        "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg" : 
+      blue: isActive ?
+        "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg" :
         "text-gray-700 hover:bg-blue-50 hover:text-blue-600",
-      purple: isActive ? 
-        "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg" : 
+      purple: isActive ?
+        "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg" :
         "text-gray-700 hover:bg-purple-50 hover:text-purple-600",
-      orange: isActive ? 
-        "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg" : 
+      orange: isActive ?
+        "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg" :
         "text-gray-700 hover:bg-orange-50 hover:text-orange-600",
-      gray: isActive ? 
-        "bg-gradient-to-r from-gray-600 to-gray-700 text-white shadow-lg" : 
+      gray: isActive ?
+        "bg-gradient-to-r from-gray-600 to-gray-700 text-white shadow-lg" :
         "text-gray-700 hover:bg-gray-50 hover:text-gray-600",
-      indigo: isActive ? 
-        "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg" : 
+      indigo: isActive ?
+        "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg" :
         "text-gray-700 hover:bg-indigo-50 hover:text-indigo-600"
     };
     return colorMap[color] || colorMap.green;
@@ -237,12 +240,36 @@ export default function Dashboard() {
                       <p className="user-email">{user?.email}</p>
                       <p className="user-role-badge capitalize">{role}</p>
                     </div>
+
+                    {/* Contact Us - Touchable Item */}
+                   <button
+  onClick={() => window.open('/coming-soon', '_blank')}
+  className="dropdown-item touchable"
+>
+  <div className="dropdown-item-content">
+    <MessageCircle className="dropdown-icon" />
+    <div className="dropdown-text">
+      <span className="dropdown-title">Contact Us</span>
+      <span className="dropdown-subtitle">Get in touch with us</span>
+    </div>
+  </div>
+  <ExternalLink className="dropdown-arrow" />
+</button>
+
+
+
+                    {/* Logout Button */}
                     <button
                       onClick={handleLogout}
-                      className="logout-btn"
+                      className="dropdown-item touchable logout-btn"
                     >
-                      <LogOut className="w-4 h-4" />
-                      <span>Logout</span>
+                      <div className="dropdown-item-content">
+                        <LogOut className="dropdown-icon" />
+                        <div className="dropdown-text">
+                          <span className="dropdown-title">Logout</span>
+                          <span className="dropdown-subtitle">Sign out of your account</span>
+                        </div>
+                      </div>
                     </button>
                   </div>
                 )}
