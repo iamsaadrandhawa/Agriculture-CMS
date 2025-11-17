@@ -11,12 +11,13 @@ import {
   Network,
   LogOut,
   ChevronDown,
+  Warehouse,
 } from "lucide-react";
 
 // Import modular sections
 import DailyTransactions from "./DailyTransactions";
 import Reports from "./Reports";
-import NewInstallation from "./NewInstallation";
+import AgriStore from "./Store";
 import Employees from "./Employees";
 import LedgerCodes from "./LedgerCodes";
 import UserManager from "./UserManager";
@@ -90,8 +91,8 @@ export default function Dashboard() {
         return <DailyTransactions {...sharedProps} />;
       case "reports":
         return <Reports {...sharedProps} />;
-      case "new-installation":
-        return <NewInstallation {...sharedProps} />;
+      case "Agristore":
+        return <AgriStore {...sharedProps} />;
       case "employees":
         return <Employees {...sharedProps} />;
       case "ledger-codes":
@@ -117,7 +118,7 @@ export default function Dashboard() {
   const menuItems = [
     { id: "daily-transactions", label: "Daily Transactions", icon: FileText, color: "green" },
     { id: "reports", label: "Reports", icon: ChartColumn, color: "red" },
-    { id: "new-installation", label: "New Installation", icon: Network, color: "blue" },
+    { id: "Agristore", label: "Agri Store", icon: Warehouse, color: "blue" },
     { id: "employees", label: "Employees", icon: Users, color: "purple" },
     { id: "bikes", label: "Vehicles", icon: Tractor, color: "orange" },
     ...(role === "admin" ? [
