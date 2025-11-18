@@ -12,6 +12,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Qodigi Console Signature
+  useEffect(() => {
+    console.log(`
+╔══════════════════════════════════════════════════╗
+║              QODIGI AUTHENTICATION               ║
+║           Secure Login Portal v1.0              ║
+║        Powered by Qodigi Technology             ║
+╚══════════════════════════════════════════════════╝
+    `);
+  }, []);
+
   // Animation for floating elements
   useEffect(() => {
     const createFloatingElement = () => {
@@ -19,7 +30,7 @@ export default function Login() {
       if (!container) return;
 
       const element = document.createElement('div');
-      const types = ['leaf', 'seed', 'wheat'];
+      const types = ['leaf', 'seed', 'wheat', 'qodigi'];
       const type = types[Math.floor(Math.random() * types.length)];
 
       element.className = `floating-element floating-${type}`;
@@ -69,15 +80,15 @@ export default function Login() {
 
         // 🚫 If user status is inactive — block login
         if (userData.status && userData.status.toLowerCase() === "inactive") {
-          console.warn(`🚫 User ${user.email} is inactive. Login blocked.`);
+          console.warn(`🚫 QODIGI SECURITY: User ${user.email} login blocked - Account inactive`);
           setError("Your account is inactive. Please contact the administrator.");
           setLoading(false);
           return;
         }
 
-        console.log(`✅ Welcome ${user.email}! Role: ${userData.role}`);
+        console.log(`✅ QODIGI AUTH: Welcome ${user.email}! Role: ${userData.role}`);
       } else {
-        console.warn("⚠️ User document not found in Firestore. Assigning default role.");
+        console.warn("⚠️ QODIGI SYSTEM: User document not found. Assigning default role.");
         userData = { role: "read", email: user.email, status: "active" };
       }
 
@@ -88,6 +99,8 @@ export default function Login() {
         role: userData.role,
         name: userData.name || "",
         status: userData.status || "active",
+        platform: "qodigi-platform",
+        version: "1.0"
       };
 
       localStorage.setItem("userData", JSON.stringify(dataToStore));
@@ -96,11 +109,17 @@ export default function Login() {
       navigate("/dashboard", { state: dataToStore });
 
     } catch (err) {
-      console.error("❌ Login error:", err);
+      console.error("❌ QODIGI AUTH ERROR:", err);
       setError("Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Contact Qodigi function
+  const handleContactQodigi = () => {
+    console.log("🌐 QODIGI: Navigating to qodigi.netlify.app");
+    window.open("https://qodigi.netlify.app", "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -109,11 +128,20 @@ export default function Login() {
       <div className="background-container">
         <div className="animation-container"></div>
         <div className="gradient-overlay"></div>
+        
+        {/* Qodigi Background Signature */}
+        <div className="qodigi-watermark">
+          <div className="qodigi-text">QODIGI</div>
+          <div className="qodigi-subtext">TECHNOLOGY</div>
+        </div>
       </div>
 
       {/* Main content */}
       <div className="content-wrapper">
         <div className="login-card">
+         
+         
+
           {/* Logo with animation */}
           <div className="logo-container">
             <div className="logo-animation">
@@ -132,7 +160,9 @@ export default function Login() {
           {/* Welcome text */}
           <div className="welcome-section">
             <h1 className="welcome-title">Welcome Back</h1>
-
+            <p className="welcome-subtitle">
+              Secure access to your agricultural management system
+            </p>
           </div>
 
           {/* Form */}
@@ -188,25 +218,38 @@ export default function Login() {
                 "Login to Dashboard"
               )}
             </button>
-            {/* <div className="text-center mt-6">
-              <p className="text-sm text-gray-600">
-                Need to create an admin account?{" "}
-                <Link
-                  to="/signup"
-                  className="text-green-600 hover:text-green-700 font-medium"
-                >
-                  Create Admin
-                </Link>
-              </p>
-            </div> */}
           </form>
 
+          {/* Enhanced Footer with Qodigi Signature */}
           <div className="footer">
-            <p className="footer-text">
-              © {new Date().getFullYear()} by SAAD.Fresh air therapy.
-            </p>
+            <div className="footer-content">
+              <p className="footer-text">
+                © {new Date().getFullYear()} Agricultural Management System
+              </p>
+              <div className="qodigi-signature">
+                <div className="security-badge">
+                  <div className="security-dot"></div>
+                  <span>Secured by</span>
+                </div>
+                <span 
+                  className="qodigi-link"
+                  onClick={handleContactQodigi}
+                  title="Visit Qodigi Website"
+                >
+                  Qodigi
+                </span>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Hidden Qodigi Metadata */}
+      <div style={{ display: 'none' }} 
+           data-platform="qodigi-rms" 
+           data-version="1.0" 
+           data-company="Qodigi">
+        Qodigi Agricultural Management System - Secure, Reliable, Professional
       </div>
 
       <style jsx>{`
@@ -253,6 +296,33 @@ export default function Login() {
           z-index: -1;
         }
         
+        /* Qodigi Watermark */
+        .qodigi-watermark {
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+          text-align: right;
+          opacity: 0.1;
+          pointer-events: none;
+          z-index: -1;
+        }
+        
+        .qodigi-text {
+          font-size: 48px;
+          font-weight: 900;
+          color: white;
+          line-height: 1;
+          letter-spacing: 2px;
+        }
+        
+        .qodigi-subtext {
+          font-size: 14px;
+          font-weight: 600;
+          color: white;
+          letter-spacing: 4px;
+          margin-top: -5px;
+        }
+        
         .content-wrapper {
           width: 100%;
           max-width: 440px;
@@ -278,6 +348,28 @@ export default function Login() {
           right: 0;
           height: 4px;
           background: linear-gradient(90deg, #27ae60, #2ecc71, #58d68d);
+        }
+        
+        /* Qodigi Badge */
+        .qodigi-badge {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          background: linear-gradient(135deg, #27ae60, #2ecc71);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+        }
+        
+        .qodigi-badge-text {
+          background: linear-gradient(45deg, #fff, #f0f0f0);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
         }
         
         .logo-container {
@@ -456,12 +548,59 @@ export default function Login() {
         
         .footer {
           margin-top: 32px;
-          text-align: center;
+        }
+        
+        .footer-content {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          align-items: center;
         }
         
         .footer-text {
           font-size: 14px;
           color: #888;
+          text-align: center;
+        }
+        
+        /* Qodigi Signature */
+        .qodigi-signature {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          color: #666;
+        }
+        
+        .security-badge {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        
+        .security-dot {
+          width: 6px;
+          height: 6px;
+          background: #27ae60;
+          border-radius: 50%;
+          animation: pulse 2s infinite;
+        }
+        
+        .qodigi-link {
+          font-weight: 700;
+          color: #27ae60;
+          cursor: pointer;
+          transition: color 0.3s ease;
+          text-decoration: underline;
+        }
+        
+        .qodigi-link:hover {
+          color: #2ecc71;
+        }
+        
+        .version {
+          color: #999;
+          font-size: 11px;
         }
         
         /* Floating elements */
@@ -487,6 +626,12 @@ export default function Login() {
         .floating-wheat::before {
           content: '🌾';
           font-size: 22px;
+        }
+        
+        .floating-qodigi::before {
+          content: '⚡';
+          font-size: 18px;
+          color: #27ae60;
         }
         
         /* Animations */
@@ -531,6 +676,15 @@ export default function Login() {
           
           .welcome-title {
             font-size: 24px;
+          }
+          
+          .qodigi-watermark {
+            bottom: 10px;
+            right: 10px;
+          }
+          
+          .qodigi-text {
+            font-size: 36px;
           }
         }
       `}</style>

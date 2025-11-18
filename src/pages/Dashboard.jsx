@@ -14,6 +14,10 @@ import {
   Warehouse,
   ExternalLink,
   MessageCircle,
+  Mail,
+  Globe,
+  Shield,
+  Zap,
 } from "lucide-react";
 import "./Dropdown.css";
 
@@ -46,6 +50,18 @@ export default function Dashboard() {
   // ✅ Shared (global) data — visible to every logged-in user
   const [dailyTransactionsData, setDailyTransactionsData] = useState([]);
 
+  // ✅ Qodigi Console Signature
+  useEffect(() => {
+    console.log(`
+╔══════════════════════════════════════════════════╗
+║                QODIGI DASHBOARD                  ║
+║           Enterprise Business Platform           ║
+║      User: ${name?.substring(0, 15).padEnd(15)} | Role: ${role?.padEnd(8)}     ║
+║         Session: ${new Date().toLocaleTimeString()}                ║
+╚══════════════════════════════════════════════════╝
+    `);
+  }, [name, role]);
+
   // ✅ Load global data (shared among users)
   useEffect(() => {
     const saved = localStorage.getItem("sharedData");
@@ -69,17 +85,29 @@ export default function Dashboard() {
         setUser(currentUser);
         setRole(storedUser?.role || "read"); // default role: read
         setName(storedUser?.name || "");
+        
+        // Qodigi Performance Logging
+        console.log(`🚀 QODIGI SYSTEM: Dashboard loaded for ${storedUser?.email}`);
+        console.log(`🎯 QODIGI ROLE: ${storedUser?.role} | Platform: qodigi-rms-v1.0`);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // ✅ Logout
+  // ✅ Logout with Qodigi tracking
   const handleLogout = async () => {
+    console.log(`🔐 QODIGI AUTH: User ${name} logging out`);
     await signOut(auth);
     localStorage.removeItem("userData");
     window.location.href = "/";
   };
+
+  // ✅ Contact Qodigi functions
+  const handleContactQodigi = () => {
+    console.log("🌐 QODIGI: Navigating to qodigi.netlify.app");
+    window.open("https://qodigi.netlify.app", "_blank", "noopener,noreferrer");
+  };
+
 
   // ✅ Main content switch
   const renderContent = () => {
@@ -107,8 +135,8 @@ export default function Dashboard() {
           <UserManager />
         ) : (
           <div className="access-denied">
-            <div className="denied-icon">🔒</div>
-            <h3>Access Denied</h3>
+            <Shield className="denied-icon" />
+            <h3>Qodigi Security - Access Denied</h3>
             <p>Only Administrators can manage users</p>
           </div>
         );
@@ -163,6 +191,12 @@ export default function Dashboard() {
       <div className="background-animation">
         <div className="animation-container"></div>
         <div className="gradient-overlay"></div>
+        
+        {/* Qodigi Background Signature */}
+        <div className="qodigi-watermark">
+          <div className="qodigi-text">QODIGI</div>
+          <div className="qodigi-subtext">TECHNOLOGY</div>
+        </div>
       </div>
 
       {/* Main Layout */}
@@ -171,7 +205,7 @@ export default function Dashboard() {
         <main className="main-content">
           {/* Top Header with Navigation */}
           <header className="top-header">
-            {/* Left Section: Logo */}
+            {/* Left Section: Logo with Qodigi Badge */}
             <div className="header-left">
               <div className="logo-section">
                 <div className="logo-wrapper">
@@ -187,6 +221,7 @@ export default function Dashboard() {
                     <p>Management System</p>
                   </div>
                 </div>
+                
               </div>
             </div>
 
@@ -214,13 +249,9 @@ export default function Dashboard() {
               </nav>
             </div>
 
-            {/* Right Section: User Info */}
+            {/* Right Section: User Info + Contact Button */}
             <div className="header-right">
-              {/* <div className="breadcrumb">
-                <span className="section-title">
-                  {menuItems.find(item => item.id === activeSection)?.label || "Dashboard"}
-                </span>
-              </div> */}
+             
 
               <div className="user-dropdown">
                 <button
@@ -241,22 +272,24 @@ export default function Dashboard() {
                       <p className="user-role-badge capitalize">{role}</p>
                     </div>
 
-                    {/* Contact Us - Touchable Item */}
-                   <button
-  onClick={() => window.open('/coming-soon', '_blank')}
-  className="dropdown-item touchable"
->
-  <div className="dropdown-item-content">
-    <MessageCircle className="dropdown-icon" />
-    <div className="dropdown-text">
-      <span className="dropdown-title">Contact Us</span>
-      <span className="dropdown-subtitle">Get in touch with us</span>
-    </div>
-  </div>
-  <ExternalLink className="dropdown-arrow" />
-</button>
+                    
 
+                    {/* Contact Us */}
+                    <button
+                      onClick={handleContactQodigi}
+                      className="dropdown-item touchable"
+                    >
+                      <div className="dropdown-item-content">
+                        <MessageCircle className="dropdown-icon" />
+                        <div className="dropdown-text">
+                          <span className="dropdown-title">Contact Us</span>
+                          <span className="dropdown-subtitle">Get in touch</span>
+                        </div>
+                      </div>
+                      <ExternalLink className="dropdown-arrow" />
+                    </button>
 
+                 
 
                     {/* Logout Button */}
                     <button
@@ -280,8 +313,61 @@ export default function Dashboard() {
           {/* Content Area */}
           <div className="content-area">
             {renderContent()}
+            
+            {/* Qodigi Footer Signature */}
+            <div className="qodigi-footer-signature">
+              <div className="security-badge">
+                <div className="security-dot"></div>
+                <span>Secured by</span>
+              </div>
+              <span 
+                className="qodigi-link"
+                onClick={handleContactQodigi}
+                title="Visit Qodigi Website"
+              >
+                Qodigi
+              </span>
+              <span className="version">v1.0</span>
+            </div>
           </div>
         </main>
+      </div>
+
+      {/* Qodigi System Status Bar */}
+      <div className="qodigi-status-bar">
+        <div className="status-content">
+          <div className="status-left">
+            <div className="status-indicator">
+              <div className="status-dot"></div>
+              <span>System Online</span>
+            </div>
+            <span className="status-separator">|</span>
+            <span>Qodigi Platform</span>
+            <span className="status-separator">|</span>
+            <span>User: {name}</span>
+          </div>
+          <div className="status-right">
+            <span 
+              className="status-link"
+              onClick={handleContactQodigi}
+              title="Visit Qodigi Website"
+            >
+              Powered by Qodigi
+            </span>
+            <span className="status-separator">|</span>
+            <span>{new Date().toLocaleTimeString()}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Hidden Qodigi Metadata */}
+      <div style={{ display: 'none' }} 
+           data-platform="qodigi-rms" 
+           data-version="1.0" 
+           data-company="Qodigi"
+           data-user-role={role}
+           data-user-name={name}>
+        Qodigi Agricultural Management System - Secure, Reliable, Professional
       </div>
 
       <style jsx>{`
@@ -324,6 +410,33 @@ export default function Dashboard() {
           z-index: -1;
         }
 
+        /* Qodigi Watermark */
+        .qodigi-watermark {
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+          text-align: right;
+          opacity: 0.05;
+          pointer-events: none;
+          z-index: -1;
+        }
+
+        .qodigi-text {
+          font-size: 48px;
+          font-weight: 900;
+          color: white;
+          line-height: 1;
+          letter-spacing: 2px;
+        }
+
+        .qodigi-subtext {
+          font-size: 14px;
+          font-weight: 600;
+          color: white;
+          letter-spacing: 4px;
+          margin-top: -5px;
+        }
+
         .dashboard-layout {
           display: flex;
           height: 100vh;
@@ -363,6 +476,7 @@ export default function Dashboard() {
         .logo-section {
           display: flex;
           align-items: center;
+          gap: 12px;
         }
 
         .logo-wrapper {
@@ -402,6 +516,43 @@ export default function Dashboard() {
           color: #666;
           margin: 0;
           line-height: 1.2;
+        }
+
+        /* Qodigi Badge */
+        .qodigi-badge {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: linear-gradient(135deg, #27ae60, #2ecc71);
+          color: white;
+          padding: 4px 8px;
+          border-radius: 6px;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+        }
+
+        /* Contact Qodigi Button */
+        .contact-qodigi-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+          color: white;
+          border: none;
+          padding: 8px 12px;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .contact-qodigi-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
 
         /* Center Section: Navigation Menu */
@@ -472,20 +623,6 @@ export default function Dashboard() {
           flex-shrink: 0;
         }
 
-        .breadcrumb {
-          padding: 8px 16px;
-          background: rgba(255, 255, 255, 0.9);
-          border-radius: 8px;
-          border: 1px solid rgba(0, 0, 0, 0.1);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        }
-
-        .section-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: #1a1a1a;
-        }
-
         .user-dropdown {
           position: relative;
         }
@@ -534,7 +671,7 @@ export default function Dashboard() {
           border-radius: 12px;
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
           border: 1px solid rgba(0, 0, 0, 0.1);
-          min-width: 200px;
+          min-width: 220px;
           z-index: 30;
         }
 
@@ -558,10 +695,11 @@ export default function Dashboard() {
           display: inline-block;
         }
 
-        .logout-btn {
+        .dropdown-item {
           width: 100%;
           display: flex;
           align-items: center;
+          justify-content: space-between;
           gap: 8px;
           padding: 12px 16px;
           background: none;
@@ -569,17 +707,162 @@ export default function Dashboard() {
           cursor: pointer;
           color: #666;
           transition: background 0.2s;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .dropdown-item:last-child {
+          border-bottom: none;
+        }
+
+        .dropdown-item:hover {
+          background: rgba(0, 0, 0, 0.05);
+        }
+
+        .dropdown-item-content {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+        }
+
+        .dropdown-icon {
+          width: 16px;
+          height: 16px;
+          color: #666;
+        }
+
+        .dropdown-text {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .dropdown-title {
+          font-size: 14px;
+          font-weight: 500;
+          color: #333;
+        }
+
+        .dropdown-subtitle {
+          font-size: 12px;
+          color: #888;
+        }
+
+        .dropdown-arrow {
+          width: 14px;
+          height: 14px;
+          color: #999;
+        }
+
+        .logout-btn {
+          color: #dc2626;
         }
 
         .logout-btn:hover {
           background: rgba(239, 68, 68, 0.1);
-          color: #dc2626;
         }
 
         .content-area {
           flex: 1;
           padding: 24px;
           overflow-y: auto;
+          position: relative;
+        }
+
+        /* Qodigi Footer Signature */
+        .qodigi-footer-signature {
+          position: absolute;
+          bottom: 16px;
+          right: 24px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          color: #666;
+        }
+
+        .security-badge {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .security-dot {
+          width: 6px;
+          height: 6px;
+          background: #27ae60;
+          border-radius: 50%;
+          animation: pulse 2s infinite;
+        }
+
+        .qodigi-link {
+          font-weight: 700;
+          color: #27ae60;
+          cursor: pointer;
+          transition: color 0.3s ease;
+          text-decoration: underline;
+        }
+
+        .qodigi-link:hover {
+          color: #2ecc71;
+        }
+
+        .version {
+          color: #999;
+          font-size: 11px;
+        }
+
+        /* Qodigi Status Bar */
+        .qodigi-status-bar {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(135deg, #1e293b, #0f172a);
+          color: white;
+          padding: 6px 16px;
+          font-size: 11px;
+          z-index: 50;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-content {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .status-left, .status-right {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .status-indicator {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          background: #10b981;
+          border-radius: 50%;
+          animation: pulse 2s infinite;
+        }
+
+        .status-separator {
+          color: #6b7280;
+        }
+
+        .status-link {
+          cursor: pointer;
+          transition: color 0.3s ease;
+        }
+
+        .status-link:hover {
+          color: #60a5fa;
         }
 
         /* Access Denied Styling */
@@ -590,8 +873,10 @@ export default function Dashboard() {
         }
 
         .denied-icon {
-          font-size: 48px;
-          margin-bottom: 16px;
+          width: 48px;
+          height: 48px;
+          color: #dc2626;
+          margin: 0 auto 16px;
         }
 
         .access-denied h3 {
@@ -608,56 +893,7 @@ export default function Dashboard() {
           100% { opacity: 1; }
         }
 
-        /* Floating elements for background */
-        .floating-element {
-          position: absolute;
-          pointer-events: none;
-          z-index: -1;
-          animation-name: float;
-          animation-timing-function: linear;
-          animation-iteration-count: infinite;
-        }
-
-        .floating-leaf::before {
-          content: '🍃';
-          font-size: 20px;
-        }
-
-        .floating-seed::before {
-          content: '🌱';
-          font-size: 18px;
-        }
-
-        .floating-wheat::before {
-          content: '🌾';
-          font-size: 19px;
-        }
-
-        @keyframes float {
-          0% {
-            transform: translateY(100vh) rotate(0deg);
-          }
-          100% {
-            transform: translateY(-100px) rotate(360deg);
-          }
-        }
-
         /* Responsive Design */
-        @media (max-width: 1200px) {
-          .navigation-menu {
-            gap: 6px;
-          }
-          
-          .nav-button {
-            padding: 8px 12px;
-            font-size: 13px;
-          }
-          
-          .nav-button-label {
-            font-size: 12px;
-          }
-        }
-
         @media (max-width: 1024px) {
           .top-header {
             flex-wrap: wrap;
@@ -676,84 +912,37 @@ export default function Dashboard() {
             overflow-x: auto;
             padding-bottom: 4px;
           }
-          
-          .header-left, .header-right {
-            flex: 1;
-          }
-          
-          .header-right {
-            justify-content: flex-end;
-          }
         }
 
         @media (max-width: 768px) {
-          .top-header {
-            padding: 10px 12px;
-          }
-
-          .logo-text h2 {
-            font-size: 16px;
-          }
-
-          .logo-text p {
-            font-size: 10px;
-          }
-
-          .logo-circle {
-            width: 38px;
-            height: 38px;
-          }
-
-          .logo-image {
-            width: 22px;
-            height: 22px;
-          }
-
-          .nav-button {
-            padding: 6px 10px;
-            font-size: 12px;
-          }
-
-          .nav-button-label {
-            font-size: 11px;
-          }
-
-          .section-title {
-            font-size: 13px;
-          }
-
-          .user-name-sm {
+          .contact-qodigi-btn span {
             display: none;
           }
-
-          .breadcrumb {
-            padding: 6px 12px;
+          
+          .contact-qodigi-btn {
+            padding: 8px;
           }
-
-          .content-area {
-            padding: 16px;
+          
+          .qodigi-badge {
+            display: none;
+          }
+          
+          .status-content {
+            flex-direction: column;
+            gap: 4px;
+            text-align: center;
           }
         }
 
         @media (max-width: 480px) {
-          .logo-text {
+          .user-name-sm {
             display: none;
           }
-
-          .navigation-menu {
-            gap: 4px;
-          }
-
-          .nav-button {
-            padding: 6px 8px;
-          }
-
-          .nav-button-label {
-            font-size: 10px;
-          }
-
-          .breadcrumb {
-            display: none;
+          
+          .qodigi-footer-signature {
+            position: static;
+            justify-content: center;
+            margin-top: 20px;
           }
         }
       `}</style>
