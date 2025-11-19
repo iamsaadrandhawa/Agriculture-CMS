@@ -18,6 +18,9 @@ import {
   Globe,
   Shield,
   Zap,
+  Building,
+  Landmark,
+  Wallet,
 } from "lucide-react";
 import "./Dropdown.css";
 
@@ -29,6 +32,7 @@ import Employees from "./Employees";
 import LedgerCodes from "./LedgerCodes";
 import UserManager from "./UserManager";
 import VehicalManager from "./VehicalManager";
+import BankManager from "./BankManager"; // We'll create this
 
 // ✅ Helper to load user role from localStorage
 function getStoredUser() {
@@ -49,31 +53,36 @@ export default function Dashboard() {
 
   // ✅ Shared (global) data — visible to every logged-in user
   const [dailyTransactionsData, setDailyTransactionsData] = useState([]);
-
-  // ✅ Qodigi Console Signature
-  useEffect(() => {
-    console.log(`
-╔══════════════════════════════════════════════════╗
-║                QODIGI DASHBOARD                  ║
-║           Enterprise Business Platform           ║
-║      User: ${name?.substring(0, 15).padEnd(15)} | Role: ${role?.padEnd(8)}     ║
-║         Session: ${new Date().toLocaleTimeString()}                ║
-╚══════════════════════════════════════════════════╝
-    `);
-  }, [name, role]);
+  const [banksData, setBanksData] = useState([]);
+  const [cashBalance, setCashBalance] = useState(0);
 
   // ✅ Load global data (shared among users)
   useEffect(() => {
-    const saved = localStorage.getItem("sharedData");
-    if (saved) {
-      setDailyTransactionsData(JSON.parse(saved));
+    const savedTransactions = localStorage.getItem("sharedData");
+    const savedBanks = localStorage.getItem("banksData");
+    const savedCash = localStorage.getItem("cashBalance");
+
+    if (savedTransactions) {
+      setDailyTransactionsData(JSON.parse(savedTransactions));
+    }
+    if (savedBanks) {
+      setBanksData(JSON.parse(savedBanks));
+    }
+    if (savedCash) {
+      setCashBalance(parseFloat(savedCash));
     }
   }, []);
 
   // ✅ Save data globally so every user sees same thing
   useEffect(() => {
     localStorage.setItem("sharedData", JSON.stringify(dailyTransactionsData));
-  }, [dailyTransactionsData]);
+    localStorage.setItem("banksData", JSON.stringify(banksData));
+    localStorage.setItem("cashBalance", cashBalance.toString());
+  }, [dailyTransactionsData, banksData, cashBalance]);
+
+  // ✅ Calculate total bank balance
+  const totalBankBalance = banksData.reduce((total, bank) => total + (parseFloat(bank.balance) || 0), 0);
+  const totalBalance = totalBankBalance + cashBalance;
 
   // ✅ Firebase Auth + get role from localStorage
   useEffect(() => {
@@ -108,13 +117,16 @@ export default function Dashboard() {
     window.open("https://qodigi.netlify.app", "_blank", "noopener,noreferrer");
   };
 
-
   // ✅ Main content switch
   const renderContent = () => {
     const sharedProps = {
       role,
       data: dailyTransactionsData,
       setData: setDailyTransactionsData,
+      banksData,
+      setBanksData,
+      cashBalance,
+      setCashBalance,
     };
 
     switch (activeSection) {
@@ -126,18 +138,24 @@ export default function Dashboard() {
         return <AgriStore {...sharedProps} />;
       case "employees":
         return <Employees {...sharedProps} />;
-      case "ledger-codes":
-        return <LedgerCodes {...sharedProps} />;
       case "bikes":
         return <VehicalManager {...sharedProps} />;
+      case "banks":
+        return <BankManager {...sharedProps} />;
       case "user-manager":
-        return role === "admin" ? (
-          <UserManager />
-        ) : (
+        return role === "admin" ? <UserManager {...sharedProps} /> : (
           <div className="access-denied">
+            <Network className="denied-icon" />
+            <h3>Access Denied</h3>
+            <p>You do not have permission to access User Management.</p>
+          </div>
+        );
+      case "ledger-manager":
+        return role === "admin" ? <LedgerCodes {...sharedProps} /> : (
+          <div className="access-denied"> 
             <Shield className="denied-icon" />
-            <h3>Qodigi Security - Access Denied</h3>
-            <p>Only Administrators can manage users</p>
+            <h3>Access Denied</h3>
+            <p>You do not have permission to access Ledger Codes.</p>
           </div>
         );
       default:
@@ -145,17 +163,14 @@ export default function Dashboard() {
     }
   };
 
-  // Menu items configuration
+  // Menu items configuration (simplified - moved admin items to dropdown)
   const menuItems = [
     { id: "daily-transactions", label: "Daily Transactions", icon: FileText, color: "green" },
     { id: "reports", label: "Reports", icon: ChartColumn, color: "red" },
     { id: "Agristore", label: "Agri Store", icon: Warehouse, color: "blue" },
     { id: "employees", label: "Employees", icon: Users, color: "purple" },
     { id: "bikes", label: "Vehicles", icon: Tractor, color: "orange" },
-    ...(role === "admin" ? [
-      { id: "user-manager", label: "User Management", icon: UserPlus, color: "gray" },
-      { id: "ledger-codes", label: "Ledger Codes", icon: Tag, color: "indigo" }
-    ] : [])
+    { id: "banks", label: "Banks", icon: Landmark, color: "indigo" },
   ];
 
   const getColorClasses = (color, isActive) => {
@@ -222,6 +237,23 @@ export default function Dashboard() {
                   </div>
                 </div>
                 
+                {/* Balance Stats */}
+                <div className="balance-stats">
+                  <div className="balance-item">
+                    <Wallet className="w-4 h-4 text-green-600" />
+                    <span className="balance-label">Cash:</span>
+                    <span className="balance-amount">Rs. {cashBalance.toLocaleString()}</span>
+                  </div>
+                  <div className="balance-item">
+                    <Landmark className="w-4 h-4 text-blue-600" />
+                    <span className="balance-label">Banks:</span>
+                    <span className="balance-amount">Rs. {totalBankBalance.toLocaleString()}</span>
+                  </div>
+                  <div className="balance-item total">
+                    <span className="balance-label">Total:</span>
+                    <span className="balance-amount">Rs. {totalBalance.toLocaleString()}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -251,8 +283,6 @@ export default function Dashboard() {
 
             {/* Right Section: User Info + Contact Button */}
             <div className="header-right">
-             
-
               <div className="user-dropdown">
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
@@ -272,7 +302,42 @@ export default function Dashboard() {
                       <p className="user-role-badge capitalize">{role}</p>
                     </div>
 
-                    
+                    {/* Admin Sections in Dropdown */}
+                    {role === "admin" && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setActiveSection("user-manager");
+                            setUserDropdownOpen(false);
+                          }}
+                          className="dropdown-item touchable"
+                        >
+                          <div className="dropdown-item-content">
+                            <UserPlus className="dropdown-icon" />
+                            <div className="dropdown-text">
+                              <span className="dropdown-title">User Management</span>
+                              <span className="dropdown-subtitle">Manage system users</span>
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setActiveSection("ledger-manager");
+                            setUserDropdownOpen(false);
+                          }}
+                          className="dropdown-item touchable"
+                        >
+                          <div className="dropdown-item-content">
+                            <Tag className="dropdown-icon" />
+                            <div className="dropdown-text">
+                              <span className="dropdown-title">Ledger Codes</span>
+                              <span className="dropdown-subtitle">Manage accounting codes</span>
+                            </div>
+                          </div>
+                        </button>
+                      </>
+                    )}
 
                     {/* Contact Us */}
                     <button
@@ -288,8 +353,6 @@ export default function Dashboard() {
                       </div>
                       <ExternalLink className="dropdown-arrow" />
                     </button>
-
-                 
 
                     {/* Logout Button */}
                     <button
@@ -313,22 +376,6 @@ export default function Dashboard() {
           {/* Content Area */}
           <div className="content-area">
             {renderContent()}
-            
-            {/* Qodigi Footer Signature */}
-            <div className="qodigi-footer-signature">
-              <div className="security-badge">
-                <div className="security-dot"></div>
-                <span>Secured by</span>
-              </div>
-              <span 
-                className="qodigi-link"
-                onClick={handleContactQodigi}
-                title="Visit Qodigi Website"
-              >
-                Qodigi
-              </span>
-              <span className="version">v1.0</span>
-            </div>
           </div>
         </main>
       </div>
@@ -345,6 +392,8 @@ export default function Dashboard() {
             <span>Qodigi Platform</span>
             <span className="status-separator">|</span>
             <span>User: {name}</span>
+            <span className="status-separator">|</span>
+            <span>Cash: Rs. {cashBalance.toLocaleString()}</span>
           </div>
           <div className="status-right">
             <span 
@@ -476,7 +525,7 @@ export default function Dashboard() {
         .logo-section {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 20px;
         }
 
         .logo-wrapper {
@@ -518,41 +567,48 @@ export default function Dashboard() {
           line-height: 1.2;
         }
 
-        /* Qodigi Badge */
-        .qodigi-badge {
+        /* Balance Stats */
+        .balance-stats {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 16px;
+          background: rgba(255, 255, 255, 0.9);
+          padding: 8px 16px;
+          border-radius: 12px;
+          border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .balance-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+
+        .balance-item.total {
           background: linear-gradient(135deg, #27ae60, #2ecc71);
           color: white;
           padding: 4px 8px;
           border-radius: 6px;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-          box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+          margin-left: 4px;
         }
 
-        /* Contact Qodigi Button */
-        .contact-qodigi-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        .balance-label {
+          color: #666;
+        }
+
+        .balance-item.total .balance-label {
           color: white;
-          border: none;
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
         }
 
-        .contact-qodigi-btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        .balance-amount {
+          font-weight: 600;
+          color: #1a1a1a;
+        }
+
+        .balance-item.total .balance-amount {
+          color: white;
         }
 
         /* Center Section: Navigation Menu */
@@ -769,49 +825,6 @@ export default function Dashboard() {
           position: relative;
         }
 
-        /* Qodigi Footer Signature */
-        .qodigi-footer-signature {
-          position: absolute;
-          bottom: 16px;
-          right: 24px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 12px;
-          color: #666;
-        }
-
-        .security-badge {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .security-dot {
-          width: 6px;
-          height: 6px;
-          background: #27ae60;
-          border-radius: 50%;
-          animation: pulse 2s infinite;
-        }
-
-        .qodigi-link {
-          font-weight: 700;
-          color: #27ae60;
-          cursor: pointer;
-          transition: color 0.3s ease;
-          text-decoration: underline;
-        }
-
-        .qodigi-link:hover {
-          color: #2ecc71;
-        }
-
-        .version {
-          color: #999;
-          font-size: 11px;
-        }
-
         /* Qodigi Status Bar */
         .qodigi-status-bar {
           position: fixed;
@@ -912,18 +925,16 @@ export default function Dashboard() {
             overflow-x: auto;
             padding-bottom: 4px;
           }
+
+          .balance-stats {
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-start;
+          }
         }
 
         @media (max-width: 768px) {
-          .contact-qodigi-btn span {
-            display: none;
-          }
-          
-          .contact-qodigi-btn {
-            padding: 8px;
-          }
-          
-          .qodigi-badge {
+          .balance-stats {
             display: none;
           }
           
@@ -937,12 +948,6 @@ export default function Dashboard() {
         @media (max-width: 480px) {
           .user-name-sm {
             display: none;
-          }
-          
-          .qodigi-footer-signature {
-            position: static;
-            justify-content: center;
-            margin-top: 20px;
           }
         }
       `}</style>
