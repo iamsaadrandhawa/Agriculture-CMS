@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { Plus, Save, Landmark, Edit3, Trash2, Search, X, Wallet, ChevronDown, BarChart3, Lock } from "lucide-react";
-import { db } from "../lib/firebase"; // Adjust path to your firebase config
+import { db } from "../lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { useGlobalCash } from "../hooks/useGlobalCash";
 
 export default function BankManager({ 
   role, 
   banksData = [], 
   setBanksData, 
-  cashBalance = 0, 
-  setCashBalance, 
   dailyTransactionsData = [],
   storeTransactionsData = []
 }) {
@@ -19,76 +18,88 @@ export default function BankManager({
   const [balance, setBalance] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [cashAmount, setCashAmount] = useState(cashBalance);
+  const [cashAmount, setCashAmount] = useState("");
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
   const [ledgerCodes, setLedgerCodes] = useState([]);
   const [loadingLedgers, setLoadingLedgers] = useState(false);
+  const [updatingCash, setUpdatingCash] = useState(false);
 
-  // Fetch ledger codes directly in BankManager
-  const loadLedgerCodes = async () => {
-    try {
-      setLoadingLedgers(true);
-      const q = query(
-        collection(db, "ledger_codes"),
-        where("is_active", "==", true)
-      );
-      const snapshot = await getDocs(q);
-      const codes = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setLedgerCodes(codes);
-      console.log("✅ Ledgers loaded:", codes.length);
-    } catch (error) {
-      console.error("Error loading ledger codes:", error);
-    } finally {
-      setLoadingLedgers(false);
-    }
-  };
+  // Use the global cash hook
+  const { cashBalance, loading: cashLoading, error: cashError, updateCashBalance } = useGlobalCash();
 
-  // Load ledgers on component mount
+  // Update local cash amount when global cash balance changes
+  useEffect(() => {
+    setCashAmount(cashBalance);
+  }, [cashBalance]);
+
+  // Fetch ledger codes
+ const loadLedgerCodes = async () => {
+  try {
+    setLoadingLedgers(true);
+    const q = query(
+      collection(db, "ledger_codes"),
+      where("is_active", "==", true),
+      where("subCategory", "in", ["bank", "Bank"]) // Filter for both "bank" and "Bank"
+
+    );
+    const snapshot = await getDocs(q);
+    const codes = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    setLedgerCodes(codes);
+    console.log("✅ Income ledgers loaded:", codes.length);
+  } catch (error) {
+    console.error("Error loading income ledger codes:", error);
+  } finally {
+    setLoadingLedgers(false);
+  }
+};
+
   useEffect(() => {
     loadLedgerCodes();
   }, []);
 
-  // Debug: Check ledger data
-  useEffect(() => {
-    console.log("📊 BankManager Data:", {
-      ledgerCodes: ledgerCodes,
-      banksData: banksData,
-      dailyTransactions: dailyTransactionsData,
-      storeTransactions: storeTransactionsData
-    });
-    
-    if (ledgerCodes.length > 0) {
-      console.log("🔍 First 3 ledger codes:", ledgerCodes.slice(0, 3));
+  // Handle cash balance update
+  const handleUpdateCash = async () => {
+    if (role === "read") {
+      alert("❌ Read-only users cannot update cash balance");
+      return;
     }
-  }, [ledgerCodes, banksData, dailyTransactionsData, storeTransactionsData]);
 
-  // Extract ALL ledger names from the fetched data
-  const allLedgerNames = ledgerCodes
-    .map(ledger => {
-      // Your ledger structure: { id, code, category, subCategory, is_active, etc. }
-      return ledger.code || ''; // Use the 'code' property from your Firestore
-    })
-    .filter(name => name && typeof name === 'string' && name.trim() !== '')
-    .filter((name, index, array) => array.indexOf(name) === index) // Remove duplicates
-    .sort();
+    const newCashBalance = parseFloat(cashAmount);
+    if (isNaN(newCashBalance)) {
+      alert("❌ Please enter a valid cash amount");
+      return;
+    }
 
-  console.log("📋 Available Ledgers:", allLedgerNames);
+    try {
+      setUpdatingCash(true);
+      const success = await updateCashBalance(newCashBalance);
+      
+      if (success) {
+        alert("✅ Cash balance updated successfully in Firestore!");
+      } else {
+        alert("❌ Failed to update cash balance");
+      }
+    } catch (error) {
+      console.error("Error updating cash:", error);
+      alert("❌ Error updating cash balance");
+    } finally {
+      setUpdatingCash(false);
+    }
+  };
 
   // Calculate bank balances from transactions
   const calculateBankBalancesFromTransactions = () => {
     const bankBalances = {};
     
-    // Initialize with current bank balances
     banksData.forEach(bank => {
       if (bank.bankName) {
         bankBalances[bank.bankName] = parseFloat(bank.balance) || 0;
       }
     });
 
-    // Process daily transactions
     dailyTransactionsData.forEach(transaction => {
       if (transaction.bank_in && transaction.bank_name) {
         const amount = parseFloat(transaction.bank_in) || 0;
@@ -100,15 +111,12 @@ export default function BankManager({
       }
     });
 
-    // Process store transactions (purchases/issues)
     storeTransactionsData.forEach(transaction => {
       if (transaction.bank_name && transaction.amount) {
         const amount = parseFloat(transaction.amount) || 0;
         if (transaction.transactionType === 'purchase') {
-          // Purchase reduces bank balance
           bankBalances[transaction.bank_name] = (bankBalances[transaction.bank_name] || 0) - amount;
         } else if (transaction.transactionType === 'issue') {
-          // Issue might increase bank balance (if it's a return/sale)
           bankBalances[transaction.bank_name] = (bankBalances[transaction.bank_name] || 0) + amount;
         }
       }
@@ -140,17 +148,7 @@ export default function BankManager({
   const totalBankBalance = bankStats.reduce((total, bank) => total + bank.calculatedBalance, 0);
   const totalBalance = totalBankBalance + cashBalance;
 
-  // Handle cash balance initialization
-  useEffect(() => {
-    setCashAmount(cashBalance);
-  }, [cashBalance]);
-
-  // Find handcash ledger for display
-  const handCashLedger = ledgerCodes.find(ledger => 
-    ledger.code?.toLowerCase().includes("handcash") || 
-    ledger.code?.toLowerCase().includes("cash")
-  );
-
+  // Bank management functions
   const handleSave = () => {
     if (!bankName.trim() || !accountTitle.trim() || !accountNumber.trim() || balance === "") {
       alert("Please fill all fields before saving.");
@@ -158,7 +156,6 @@ export default function BankManager({
     }
 
     if (editingId) {
-      // Update existing bank
       setBanksData(prev => prev.map(bank => 
         bank.id === editingId 
           ? { ...bank, bankName, accountTitle, accountNumber, balance: parseFloat(balance) }
@@ -167,7 +164,6 @@ export default function BankManager({
       alert("✅ Bank updated successfully!");
       setEditingId(null);
     } else {
-      // Add new bank
       const newBank = {
         id: Date.now().toString(),
         bankName,
@@ -203,16 +199,6 @@ export default function BankManager({
     alert("✅ Bank account deleted");
   };
 
-  const handleUpdateCash = () => {
-    const newCashBalance = parseFloat(cashAmount) || 0;
-    setCashBalance(newCashBalance);
-    
-    // Update localStorage immediately
-    localStorage.setItem("cashBalance", newCashBalance.toString());
-    
-    alert("✅ Cash balance updated successfully!");
-  };
-
   const selectBankName = (name) => {
     setBankName(name);
     setBankDropdownOpen(false);
@@ -242,6 +228,12 @@ export default function BankManager({
     return colors[category?.toLowerCase()] || colors.default;
   };
 
+  const allLedgerNames = ledgerCodes
+    .map(ledger => ledger.code || '')
+    .filter(name => name && typeof name === 'string' && name.trim() !== '')
+    .filter((name, index, array) => array.indexOf(name) === index)
+    .sort();
+
   return (
     <div className="w-full mx-auto py-3 px-4 text-[12px] text-gray-800">
       <div className="max-w-9xl mx-auto">
@@ -251,24 +243,7 @@ export default function BankManager({
           <div className="flex items-center gap-2">
             <Landmark className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-bold text-gray-900">Bank & Cash Management</h2>
-            <div className="flex items-center gap-2">
-              {loadingLedgers ? (
-                <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded animate-pulse">
-                  Loading ledgers...
-                </span>
-              ) : allLedgerNames.length > 0 ? (
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  {allLedgerNames.length} ledgers available
-                </span>
-              ) : (
-                <button
-                  onClick={loadLedgerCodes}
-                  className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded hover:bg-blue-200 transition"
-                >
-                  Reload Ledgers
-                </button>
-              )}
-            </div>
+           
           </div>
 
           <button
@@ -315,14 +290,16 @@ export default function BankManager({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[12px] font-medium text-gray-600">Cash Balance</p>
-                <p className="text-[12px] font-bold text-gray-900 mt-1">Rs. {cashBalance.toLocaleString()}</p>
-                {handCashLedger && (
-                  <p className="text-[10px] text-green-600 mt-1">
-                    From: {handCashLedger.code}
-                  </p>
-                )}
+                <p className="text-[12px] font-bold text-gray-900 mt-1">
+                  {cashLoading ? "Loading..." : `Rs. ${cashBalance.toLocaleString()}`}
+                </p>
+                <p className="text-[10px] text-green-600 mt-1">
+                  🔄 Firestore Sync
+                </p>
               </div>
-              <div className="p-3 bg-green-100 rounded-xl"><Wallet className="w-4 h-4 text-green-600" /></div>
+              <div className="p-3 bg-green-100 rounded-xl">
+                <Wallet className="w-4 h-4 text-green-600" />
+              </div>
             </div>
           </div>
 
@@ -359,7 +336,9 @@ export default function BankManager({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[12px] font-medium text-gray-600">Total Balance</p>
-                <p className="text-[12px] font-bold text-gray-900 mt-1">Rs. {totalBalance.toLocaleString()}</p>
+                <p className="text-[12px] font-bold text-gray-900 mt-1">
+                  {cashLoading ? "Loading..." : `Rs. ${totalBalance.toLocaleString()}`}
+                </p>
                 <p className="text-[10px] text-orange-600 mt-1">
                   Cash + Banks
                 </p>
@@ -367,6 +346,47 @@ export default function BankManager({
               <div className="p-3 bg-orange-100 rounded-xl"><span className="text-lg">📊</span></div>
             </div>
           </div>
+        </div>
+
+        {/* Cash Update Section */}
+        <div className="bg-white rounded-2xl p-6 mb-6 shadow-lg border border-green-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[12px] font-bold text-gray-900 flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-green-600" />
+              Update Cash Balance (Firestore)
+            </h3>
+            <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded">
+              Collection: globalcash
+            </span>
+          </div>
+          <div className="flex items-center gap-4 mb-3">
+            <input
+              type="number"
+              placeholder="Enter cash amount"
+              value={cashAmount}
+              onChange={(e) => setCashAmount(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-xl text-[12px] text-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              disabled={updatingCash || cashLoading}
+            />
+            <button
+              onClick={handleUpdateCash}
+              disabled={role === "read" || updatingCash || cashLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition shadow-md"
+            >
+              {updatingCash ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-3 h-3" /> 
+                  {role === "read" ? "Locked" : "Update Cash"}
+                </>
+              )}
+            </button>
+          </div>
+        
         </div>
 
         {/* Individual Bank Balances */}
@@ -416,45 +436,6 @@ export default function BankManager({
             </div>
           </div>
         )}
-
-        {/* Cash Update Section */}
-        <div className="bg-white rounded-2xl p-6 mb-6 shadow-lg border border-green-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[12px] font-bold text-gray-900 flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-green-600" />
-              Update Cash Balance
-              {handCashLedger && (
-                <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded">
-                  Ledger: {handCashLedger.code}
-                </span>
-              )}
-            </h3>
-            {!handCashLedger && (
-              <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
-                Tip: Create "handcash" ledger in income category
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <input
-              type="number"
-              placeholder="Enter cash amount"
-              value={cashAmount}
-              onChange={(e) => setCashAmount(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-xl text-[12px] text-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            />
-            <button
-              onClick={handleUpdateCash}
-              disabled={role === "read"}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition shadow-md"
-            >
-              <Save className="w-3 h-3" /> Update Cash
-            </button>
-          </div>
-          <p className="text-[10px] text-gray-500 mt-2">
-            This cash balance is used globally across all transactions and reports.
-          </p>
-        </div>
 
         {/* Add/Edit Bank Form */}
         {showForm && (
@@ -615,13 +596,13 @@ export default function BankManager({
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-100">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-[12px]">
+              <thead className="bg-gradient-to-r from-green-600 to-green-700 text-white text-[12px]">
                 <tr>
-                  <th className="px-6 py-3 text-left font-semibold">Bank Details</th>
-                  <th className="px-6 py-3 text-left font-semibold">Account Info</th>
-                  <th className="px-6 py-3 text-right font-semibold">Initial Balance</th>
-                  <th className="px-6 py-3 text-right font-semibold">Current Balance</th>
-                  <th className="px-6 py-3 text-center font-semibold">Actions</th>
+                  <th className="px-6 py-2 text-left font-semibold">Bank Details</th>
+                  <th className="px-6 py-2 text-left font-semibold">Account Info</th>
+                  <th className="px-6 py-2 text-right font-semibold">Initial Balance</th>
+                  <th className="px-6 py-2 text-right font-semibold">Current Balance</th>
+                  <th className="px-6 py-2 text-center font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 text-[12px]">
@@ -715,48 +696,6 @@ export default function BankManager({
             </table>
           </div>
         </div>
-
-        {/* All Available Ledgers
-        {allLedgerNames.length > 0 && (
-          <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[12px] font-bold text-gray-900 flex items-center gap-2">
-                <Landmark className="w-4 h-4 text-blue-600" />
-                All Available Ledgers ({allLedgerNames.length})
-              </h3>
-              <button
-                onClick={loadLedgerCodes}
-                className="text-[10px] text-blue-600 bg-blue-100 px-2 py-1 rounded hover:bg-blue-200 transition"
-              >
-                Refresh
-              </button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-              {allLedgerNames.map((name, index) => {
-                const category = getLedgerCategory(name);
-                
-                return (
-                  <div
-                    key={index}
-                    className={`bg-white rounded-lg p-3 border shadow-sm hover:shadow-md transition cursor-pointer ${
-                      bankName === name ? 'ring-2 ring-blue-500' : ''
-                    }`}
-                    onClick={() => selectBankName(name)}
-                  >
-                    <div className="text-[11px] font-medium text-gray-900 truncate mb-1">
-                      {name}
-                    </div>
-                    {category && category !== 'default' && (
-                      <div className={`text-[9px] px-2 py-1 rounded-full bg-gradient-to-r ${getCategoryColor(category)} text-white text-center`}>
-                        {category}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )} */}
 
         <div className="mt-6 text-center text-[12px] text-gray-600">
           Showing {filteredBanks.length} of {banksData.length} bank accounts

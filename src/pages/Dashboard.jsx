@@ -36,6 +36,9 @@ import UserManager from "./UserManager";
 import VehicalManager from "./VehicalManager";
 import BankManager from "./BankManager";
 
+// Import the global cash hook
+import { useGlobalCash } from "../hooks/useGlobalCash";
+
 // ✅ Helper to load user role from localStorage
 function getStoredUser() {
   try {
@@ -55,10 +58,12 @@ export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // ✅ Use global cash hook instead of local state
+  const { cashBalance, loading: cashLoading } = useGlobalCash();
+
   // ✅ Shared (global) data — visible to every logged-in user
   const [dailyTransactionsData, setDailyTransactionsData] = useState([]);
   const [banksData, setBanksData] = useState([]);
-  const [cashBalance, setCashBalance] = useState(0);
 
   // ✅ Check screen size
   useEffect(() => {
@@ -71,11 +76,10 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // ✅ Load global data (shared among users)
+  // ✅ Load global data (shared among users) - Remove cashBalance from localStorage
   useEffect(() => {
     const savedTransactions = localStorage.getItem("sharedData");
     const savedBanks = localStorage.getItem("banksData");
-    const savedCash = localStorage.getItem("cashBalance");
 
     if (savedTransactions) {
       setDailyTransactionsData(JSON.parse(savedTransactions));
@@ -83,17 +87,13 @@ export default function Dashboard() {
     if (savedBanks) {
       setBanksData(JSON.parse(savedBanks));
     }
-    if (savedCash) {
-      setCashBalance(parseFloat(savedCash));
-    }
   }, []);
 
-  // ✅ Save data globally so every user sees same thing
+  // ✅ Save data globally so every user sees same thing - Remove cashBalance from localStorage
   useEffect(() => {
     localStorage.setItem("sharedData", JSON.stringify(dailyTransactionsData));
     localStorage.setItem("banksData", JSON.stringify(banksData));
-    localStorage.setItem("cashBalance", cashBalance.toString());
-  }, [dailyTransactionsData, banksData, cashBalance]);
+  }, [dailyTransactionsData, banksData]);
 
   // ✅ Calculate total bank balance
   const totalBankBalance = banksData.reduce((total, bank) => total + (parseFloat(bank.balance) || 0), 0);
@@ -112,10 +112,11 @@ export default function Dashboard() {
         
         console.log(`🚀 QODIGI SYSTEM: Dashboard loaded for ${storedUser?.email}`);
         console.log(`🎯 QODIGI ROLE: ${storedUser?.role} | Platform: qodigi-rms-v1.0`);
+        console.log(`💰 GLOBAL CASH: Rs. ${cashBalance.toLocaleString()} (Firestore)`);
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [cashBalance]);
 
   // ✅ Logout with Qodigi tracking
   const handleLogout = async () => {
@@ -140,7 +141,7 @@ export default function Dashboard() {
       banksData,
       setBanksData,
       cashBalance,
-      setCashBalance,
+      // Remove setCashBalance since it's now managed by the hook
     };
 
     switch (activeSection) {
@@ -273,7 +274,12 @@ export default function Dashboard() {
                     <div className="balance-item">
                       <Wallet className="w-4 h-4 text-green-600" />
                       <span className="balance-label">Cash:</span>
-                      <span className="balance-amount">Rs. {cashBalance.toLocaleString()}</span>
+                      <span className="balance-amount">
+                        {cashLoading ? "Loading..." : `Rs. ${cashBalance.toLocaleString()}`}
+                      </span>
+                      {cashLoading && (
+                        <div className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                      )}
                     </div>
                     <div className="balance-item">
                       <Landmark className="w-4 h-4 text-blue-600" />
@@ -282,7 +288,9 @@ export default function Dashboard() {
                     </div>
                     <div className="balance-item total">
                       <span className="balance-label">Total:</span>
-                      <span className="balance-amount">Rs. {totalBalance.toLocaleString()}</span>
+                      <span className="balance-amount">
+                        {cashLoading ? "Loading..." : `Rs. ${totalBalance.toLocaleString()}`}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -322,7 +330,12 @@ export default function Dashboard() {
                 <div className="mobile-balance-summary">
                   <div className="balance-pill">
                     <Wallet className="w-3 h-3" />
-                    <span>Rs. {cashBalance.toLocaleString()}</span>
+                    <span>
+                      {cashLoading ? "Loading..." : `Rs. ${cashBalance.toLocaleString()}`}
+                    </span>
+                    {cashLoading && (
+                      <div className="w-2 h-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    )}
                   </div>
                 </div>
               )}
@@ -446,7 +459,12 @@ export default function Dashboard() {
                   <div className="balance-col">
                     <Wallet className="w-4 h-4 text-green-600" />
                     <span>Cash</span>
-                    <strong>Rs. {cashBalance.toLocaleString()}</strong>
+                    <strong>
+                      {cashLoading ? "Loading..." : `Rs. ${cashBalance.toLocaleString()}`}
+                    </strong>
+                    {cashLoading && (
+                      <div className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                    )}
                   </div>
                   <div className="balance-col">
                     <Landmark className="w-4 h-4 text-blue-600" />
@@ -456,7 +474,9 @@ export default function Dashboard() {
                 </div>
                 <div className="balance-total">
                   <span>Total Balance</span>
-                  <strong>Rs. {totalBalance.toLocaleString()}</strong>
+                  <strong>
+                    {cashLoading ? "Loading..." : `Rs. ${totalBalance.toLocaleString()}`}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -484,7 +504,9 @@ export default function Dashboard() {
             {!isMobile && (
               <>
                 <span className="status-separator">|</span>
-                <span className="status-cash">Cash: Rs. {cashBalance.toLocaleString()}</span>
+                <span className="status-cash">
+                  Cash: {cashLoading ? "Loading..." : `Rs. ${cashBalance.toLocaleString()}`}
+                </span>
               </>
             )}
           </div>
