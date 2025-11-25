@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getCurrentUser } from "../components/userUtils";
-import { db } from "../lib/firebase";
+import { db,auth } from "../lib/firebase";
 import {
     collection,
     addDoc,
@@ -11,6 +11,7 @@ import {
     Timestamp,
     query,
     where,
+    limit
 } from "firebase/firestore";
 import {
     Package,
@@ -39,6 +40,7 @@ import {
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useGlobalCash } from "../hooks/useGlobalCash";
 
 export default function AgriStore({ banksData = [], setBanksData, cashBalance, setCashBalance }) {
     const [role, setRole] = useState("");
@@ -99,11 +101,11 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
         try {
             // First try to get from ledger_codes
             const ledgerQuery = query(
-                collection(db, "ledger_codes"), 
+                collection(db, "ledger_codes"),
                 where("category", "==", "product")
             );
             const ledgerSnapshot = await getDocs(ledgerQuery);
-            
+
             if (!ledgerSnapshot.empty) {
                 const productList = ledgerSnapshot.docs.map(d => d.data().code);
                 setProducts([...new Set(productList)]);
@@ -128,11 +130,11 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
     const fetchLocations = async (transactionsList = transactions) => {
         try {
             const ledgerQuery = query(
-                collection(db, "ledger_codes"), 
+                collection(db, "ledger_codes"),
                 where("category", "==", "location")
             );
             const ledgerSnapshot = await getDocs(ledgerQuery);
-            
+
             if (!ledgerSnapshot.empty) {
                 const locationList = ledgerSnapshot.docs.map(d => d.data().code);
                 setLocations([...new Set(locationList)]);
@@ -197,21 +199,21 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
         const purchases = transactions
             .filter(t => t.transactionType === "stock_in" && t.productName === productName)
             .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date (FIFO)
-        
+
         // Calculate remaining stock
         const remainingStock = getProductStock(productName);
-        
+
         if (remainingStock <= 0) return 0;
-        
+
         let remainingValue = 0;
         let tempStock = remainingStock;
-        
+
         // Work backwards through purchases to calculate value of remaining stock (FIFO)
         for (let i = purchases.length - 1; i >= 0 && tempStock > 0; i--) {
             const purchase = purchases[i];
             const purchaseQuantity = Number(purchase.quantity || 0);
             const purchaseRate = Number(purchase.rate || 0);
-            
+
             if (tempStock >= purchaseQuantity) {
                 // Use entire purchase
                 remainingValue += purchaseQuantity * purchaseRate;
@@ -222,7 +224,7 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
                 tempStock = 0;
             }
         }
-        
+
         return remainingValue;
     };
 
@@ -237,65 +239,206 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
         }))
         .filter(product => product.stock > 0); // Only show products with stock
 
-    const handlePurchase = async () => {
-        if (!purchaseDate || !purchaseProduct || !purchaseQuantity || !purchaseRate) {
-            alert("Please fill all required fields!");
-            return;
+
+const updateGlobalCashInFirestore = async (newBalance) => {
+    try {
+        console.log("🔍 Checking globalcash collection...");
+        const cashQuery = query(collection(db, "globalcash"));
+        const snapshot = await getDocs(cashQuery);
+        
+        console.log("📊 Globalcash documents found:", snapshot.size);
+        
+        if (!snapshot.empty) {
+            const cashDoc = snapshot.docs[0];
+            console.log("📝 Updating existing globalcash document:", cashDoc.id);
+            
+            await updateDoc(doc(db, "globalcash", cashDoc.id), {
+                balance: newBalance,
+                updatedAt: new Date().toISOString()
+            });
+            console.log("✅ Global cash updated in Firestore: Rs. ${newBalance}");
+            return true;
+        } else {
+            console.log("🆕 Creating new globalcash document...");
+            await addDoc(collection(db, "globalcash"), {
+                balance: newBalance,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            console.log("✅ Global cash created in Firestore: Rs. ${newBalance}");
+            return true;
+        }
+    } catch (error) {
+        console.error("❌ Error updating global cash in Firestore:", error);
+        console.error("❌ Error code:", error.code);
+        console.error("❌ Error message:", error.message);
+        return false;
+    }
+};
+// Updated handlePurchase function
+const handlePurchase = async () => {
+    if (!purchaseDate || !purchaseProduct || !purchaseQuantity || !purchaseRate) {
+        alert("Please fill all required fields!");
+        return;
+    }
+
+    const totalAmount = Number(purchaseQuantity) * Number(purchaseRate);
+    const data = {
+        date: purchaseDate,
+        transactionType: "stock_in",
+        productName: purchaseProduct,
+        quantity: Number(purchaseQuantity),
+        unit: purchaseUnit,
+        rate: Number(purchaseRate),
+        totalAmount: totalAmount,
+        supplier,
+        remarks: purchaseRemarks,
+        bank_name: purchaseBank,
+        amount: totalAmount,
+        updatedAt: Timestamp.now(),
+    };
+
+    console.log("🔄 Starting purchase process...");
+    console.log("📦 Purchase data:", data);
+
+    try {
+        let transactionId;
+        
+        if (editingId) {
+            console.log("✏️ Updating existing transaction:", editingId);
+            await updateDoc(doc(db, "agristore_transactions", editingId), data);
+            alert("✅ Purchase updated successfully!");
+            transactionId = editingId;
+        } else {
+            console.log("➕ Adding new transaction to Firestore...");
+            const docRef = await addDoc(collection(db, "agristore_transactions"), data);
+            transactionId = docRef.id;
+            console.log("✅ Transaction saved with ID:", transactionId);
+            alert("✅ Purchase recorded successfully!");
         }
 
-        const totalAmount = Number(purchaseQuantity) * Number(purchaseRate);
-        const data = {
-            date: purchaseDate,
-            transactionType: "stock_in",
-            productName: purchaseProduct,
-            quantity: Number(purchaseQuantity),
-            unit: purchaseUnit,
-            rate: Number(purchaseRate),
-            totalAmount: totalAmount,
-            supplier,
-            remarks: purchaseRemarks,
-            bank_name: purchaseBank, // Store bank name
-            amount: totalAmount, // Store amount for bank transactions
-            updatedAt: Timestamp.now(),
-        };
-
-        try {
-            if (editingId) {
-                await updateDoc(doc(db, "agristore_transactions", editingId), data);
-                alert("✅ Purchase updated successfully!");
-            } else {
-                await addDoc(collection(db, "agristore_transactions"), data);
-                alert("✅ Purchase recorded successfully!");
+        // ✅ Update balances after successful transaction save
+        if (!editingId && purchaseBank) {
+            console.log("💰 Updating balances for payment method:", purchaseBank);
+            
+            if (purchaseBank === "cash") {
+                const newCashBalance = cashBalance - totalAmount;
+                console.log("💵 Updating cash balance:", { current: cashBalance, deduction: totalAmount, new: newCashBalance });
                 
-                // Update bank balance if bank is selected
-                if (purchaseBank && purchaseBank !== "cash") {
-                    updateBankBalance(purchaseBank, -totalAmount);
-                } else if (purchaseBank === "cash") {
-                    // Update cash balance
-                    const newCashBalance = cashBalance - totalAmount;
-                    setCashBalance(newCashBalance);
-                    localStorage.setItem("cashBalance", newCashBalance.toString());
+                // 1. Update local state
+                setCashBalance(newCashBalance);
+                localStorage.setItem("cashBalance", newCashBalance.toString());
+                
+                // 2. Update in Firestore
+                console.log("📡 Updating global cash in Firestore...");
+                const cashUpdateSuccess = await updateGlobalCashInFirestore(newCashBalance);
+                
+                if (cashUpdateSuccess) {
+                    console.log("✅ Global cash updated successfully");
+                } else {
+                    console.warn("⚠️ Purchase saved but global cash update in Firestore had issues");
+                }
+                
+            } else {
+                console.log("🏦 Updating bank balance for:", purchaseBank);
+                const bankUpdateSuccess = await updateBankBalance(purchaseBank, -totalAmount);
+                if (bankUpdateSuccess) {
+                    console.log("✅ Bank balance updated successfully");
+                } else {
+                    console.warn("⚠️ Purchase saved but bank balance update had issues");
                 }
             }
+        }
 
-            resetPurchaseForm();
-            setShowPurchaseForm(false);
-            fetchTransactions();
-        } catch (error) {
-            console.error("Error saving purchase:", error);
-            alert("❌ Failed to save purchase!");
+        console.log("🔄 Resetting form and refreshing data...");
+        resetPurchaseForm();
+        setShowPurchaseForm(false);
+        fetchTransactions();
+        console.log("🎉 Purchase process completed successfully!");
+
+    } catch (error) {
+        console.error("❌ FULL ERROR DETAILS:", error);
+        console.error("❌ Error code:", error.code);
+        console.error("❌ Error message:", error.message);
+        console.error("❌ Error stack:", error.stack);
+        
+        // More specific error messages
+        if (error.code === 'permission-denied') {
+            alert("❌ Permission denied! Check Firestore security rules.");
+        } else if (error.code === 'not-found') {
+            alert("❌ Document not found! Check collection names.");
+        } else if (error.code === 'unavailable') {
+            alert("❌ Network error! Check your internet connection.");
+        } else {
+            alert("❌ Failed to save purchase: " + error.message);
+        }
+    }
+};
+
+
+    const updateBalancesSafely = (totalAmount) => {
+        if (purchaseBank === "cash") {
+            const newCashBalance = cashBalance - totalAmount;
+            setCashBalance(newCashBalance);
+            localStorage.setItem("cashBalance", newCashBalance.toString());
+        } else if (purchaseBank && purchaseBank !== "cash") {
+            updateBankBalance(purchaseBank, -totalAmount);
         }
     };
 
-    // Function to update bank balance
-    const updateBankBalance = (bankName, amount) => {
-        setBanksData(prev => prev.map(bank => 
-            bank.bankName === bankName 
-                ? { ...bank, balance: (parseFloat(bank.balance) || 0) + amount }
-                : bank
-        ));
+// Function to update global cash in Firestore
+
+    // Function to update bank balance in both state and Firestore
+    const updateBankBalance = async (bankName, amount) => {
+        try {
+            // Find the bank in local state
+            const bankToUpdate = banksData.find(bank => bank.bankName === bankName);
+
+            if (!bankToUpdate) {
+                console.error(`❌ Bank not found: ${bankName}`);
+                return false;
+            }
+
+            const currentBalance = parseFloat(bankToUpdate.balance) || 0;
+            const newBalance = currentBalance + amount;
+
+            console.log(`🏦 Updating ${bankName}: ${currentBalance} + (${amount}) = ${newBalance}`);
+
+            // 1. Update in Firestore
+            const bankRef = doc(db, "banks", bankToUpdate.id);
+            await updateDoc(bankRef, {
+                balance: newBalance,
+                updatedAt: new Date().toISOString()
+            });
+
+            // 2. Update local state
+            setBanksData(prev => prev.map(bank =>
+                bank.bankName === bankName
+                    ? { ...bank, balance: newBalance }
+                    : bank
+            ));
+
+            console.log(`✅ Bank ${bankName} updated successfully in Firestore`);
+            return true;
+        } catch (error) {
+            console.error(`❌ Error updating bank ${bankName}:`, error);
+            return false;
+        }
     };
 
+    // Check if sufficient balance exists
+    const checkSufficientBalance = () => {
+        const totalAmount = Number(purchaseQuantity) * Number(purchaseRate);
+
+        if (purchaseBank === "cash") {
+            return cashBalance >= totalAmount;
+        } else if (purchaseBank && purchaseBank !== "cash") {
+            const selectedBank = banksData.find(bank => bank.bankName === purchaseBank);
+            const bankBalance = parseFloat(selectedBank?.balance) || 0;
+            return bankBalance >= totalAmount;
+        }
+        return true; // If no payment method selected yet
+    };
     const handleIssue = async () => {
         if (!issueDate || !issueProduct || !issueQuantity || !issueLocation) {
             alert("Please fill all required fields!");
@@ -312,20 +455,20 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
         const issuedQuantity = Number(issueQuantity);
         let remainingToIssue = issuedQuantity;
         let issuedValue = 0;
-        
+
         // Get all purchase transactions sorted by date (oldest first for FIFO)
         const purchases = transactions
             .filter(t => t.transactionType === "stock_in" && t.productName === issueProduct)
             .sort((a, b) => new Date(a.date) - new Date(b.date));
-        
+
         // Calculate value using FIFO
         for (const purchase of purchases) {
             if (remainingToIssue <= 0) break;
-            
+
             const purchaseQuantity = Number(purchase.quantity || 0);
             const purchaseRate = Number(purchase.rate || 0);
             const availableFromPurchase = purchaseQuantity;
-            
+
             if (availableFromPurchase > 0) {
                 const quantityToUse = Math.min(remainingToIssue, availableFromPurchase);
                 issuedValue += quantityToUse * purchaseRate;
@@ -405,18 +548,18 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
 
     // Filter transactions
     const filteredTransactions = transactions.filter((item) => {
-        const matchesSearch = 
+        const matchesSearch =
             item.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.remarks?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.supplier?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesFilter = 
+        const matchesFilter =
             filterType === "all" ? true : item.transactionType === filterType;
 
-        const matchesProduct = 
+        const matchesProduct =
             filterProduct === "all" ? true : item.productName === filterProduct;
 
-        const matchesLocation = 
+        const matchesLocation =
             filterLocation === "all" ? true : item.location === filterLocation;
 
         const matchesDate = !filterDate || item.date === filterDate;
@@ -450,9 +593,9 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
     // Get available banks for dropdown
     const availableBanks = [
         { name: "cash", displayName: "💵 Cash" },
-        ...banksData.map(bank => ({ 
-            name: bank.bankName, 
-            displayName: `🏦 ${bank.bankName}` 
+        ...banksData.map(bank => ({
+            name: bank.bankName,
+            displayName: `🏦 ${bank.bankName}`
         }))
     ];
 
@@ -488,7 +631,7 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
             doc.setFont("helvetica", "bold");
             doc.setFontSize(11);
             doc.setTextColor(0, 102, 51);
-            
+
             doc.text(`Current Stock: ${currentStock} kg`, pageWidth - 200, 50);
             doc.text(`Total Products: ${uniqueProducts}`, pageWidth - 200, 65);
             doc.text(`Inventory Value: Rs. ${currentInventoryValue.toLocaleString()}`, pageWidth - 200, 80);
@@ -666,7 +809,7 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {productStats.map((product, index) => (
-                                <ProductStatCard 
+                                <ProductStatCard
                                     key={index}
                                     product={product}
                                 />
@@ -677,29 +820,29 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
 
                 {/* ✅ Overall Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-[12px]">
-                    <StatCard 
-                        title="Total Stock In" 
-                        value={`${totalStockIn} `} 
-                        icon={<ArrowDownCircle className="w-4 h-4 text-blue-600" />} 
-                        color="blue" 
+                    <StatCard
+                        title="Total Stock In"
+                        value={`${totalStockIn} `}
+                        icon={<ArrowDownCircle className="w-4 h-4 text-blue-600" />}
+                        color="blue"
                     />
-                    <StatCard 
-                        title="Total Stock Out" 
-                        value={`${totalStockOut} `} 
-                        icon={<ArrowUpCircle className="w-4 h-4 text-orange-600" />} 
-                        color="orange" 
+                    <StatCard
+                        title="Total Stock Out"
+                        value={`${totalStockOut} `}
+                        icon={<ArrowUpCircle className="w-4 h-4 text-orange-600" />}
+                        color="orange"
                     />
-                    <StatCard 
-                        title="Current Inventory Value" 
-                        value={`Rs. ${currentInventoryValue.toLocaleString()}`} 
-                        icon={<TrendingUp className="w-4 h-4 text-green-600" />} 
-                        color="green" 
+                    <StatCard
+                        title="Current Inventory Value"
+                        value={`Rs. ${currentInventoryValue.toLocaleString()}`}
+                        icon={<TrendingUp className="w-4 h-4 text-green-600" />}
+                        color="green"
                     />
-                    <StatCard 
-                        title="Active Products" 
-                        value={uniqueProducts} 
-                        icon={<Package className="w-4 h-4 text-purple-600" />} 
-                        color="purple" 
+                    <StatCard
+                        title="Active Products"
+                        value={uniqueProducts}
+                        icon={<Package className="w-4 h-4 text-purple-600" />}
+                        color="purple"
                     />
                 </div>
 
@@ -839,27 +982,113 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
                             </div>
                         </div>
 
-                        {/* Total Amount Display */}
+                        {/* Total Amount Display with Enhanced Balance Information */}
                         {purchaseQuantity && purchaseRate && (
-                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                                <p className="text-blue-800 font-semibold">
-                                    Total Amount: Rs. {(Number(purchaseQuantity) * Number(purchaseRate)).toLocaleString()}
-                                </p>
-                                {purchaseBank && (
-                                    <p className="text-blue-700 text-[11px] mt-1">
-                                        This amount will be deducted from: {purchaseBank === "cash" ? "💵 Cash" : `🏦 ${purchaseBank}`}
+                            <div className="mb-4 space-y-3">
+                                {/* Total Amount Card */}
+                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                                    <p className="text-blue-800 font-semibold">
+                                        Total Amount: Rs. {(Number(purchaseQuantity) * Number(purchaseRate)).toLocaleString()}
                                     </p>
+                                    {purchaseBank && (
+                                        <p className="text-blue-700 text-[11px] mt-1">
+                                            This amount will be deducted from: {purchaseBank === "cash" ? "💵 Cash" : `🏦 ${purchaseBank}`}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Balance Details */}
+                                {purchaseBank && (
+                                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px]">
+                                            {/* Current Balance */}
+                                            <div>
+                                                <p className="text-gray-600 font-semibold">Current Balance:</p>
+                                                <p className="text-gray-800 font-bold mt-1">
+                                                    {purchaseBank === "cash"
+                                                        ? `Rs. ${cashBalance.toLocaleString()}`
+                                                        : `Rs. ${(banksData.find(bank => bank.bankName === purchaseBank)?.balance || 0).toLocaleString()}`
+                                                    }
+                                                </p>
+                                            </div>
+
+                                            {/* Balance After Purchase */}
+                                            <div>
+                                                <p className="text-gray-600 font-semibold">Balance After Purchase:</p>
+                                                <p className={`font-bold mt-1 ${checkSufficientBalance() ? 'text-green-600' : 'text-red-600'
+                                                    }`}>
+                                                    {purchaseBank === "cash"
+                                                        ? `Rs. ${(cashBalance - (Number(purchaseQuantity) * Number(purchaseRate))).toLocaleString()}`
+                                                        : `Rs. ${((banksData.find(bank => bank.bankName === purchaseBank)?.balance || 0) - (Number(purchaseQuantity) * Number(purchaseRate))).toLocaleString()}`
+                                                    }
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Insufficient Balance Warning */}
+                                {purchaseBank && !checkSufficientBalance() && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl animate-pulse">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                            <p className="text-red-800 font-semibold text-[11px]">
+                                                ⚠️ Insufficient Balance!
+                                            </p>
+                                        </div>
+                                        <p className="text-red-700 text-[10px] mt-1 ml-5">
+                                            You need Rs. {((Number(purchaseQuantity) * Number(purchaseRate)) -
+                                                (purchaseBank === "cash"
+                                                    ? cashBalance
+                                                    : (banksData.find(bank => bank.bankName === purchaseBank)?.balance || 0)
+                                                )).toLocaleString()} more to complete this purchase.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Sufficient Balance Confirmation */}
+                                {purchaseBank && checkSufficientBalance() && (
+                                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                            <p className="text-green-800 font-semibold text-[11px]">
+                                                ✅ Sufficient Balance Available
+                                            </p>
+                                        </div>
+                                        <p className="text-green-700 text-[10px] mt-1 ml-5">
+                                            You have enough balance to complete this purchase.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* No Payment Method Selected Hint */}
+                                {!purchaseBank && (
+                                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                            <p className="text-yellow-800 font-semibold text-[11px]">
+                                                💡 Select Payment Method
+                                            </p>
+                                        </div>
+                                        <p className="text-yellow-700 text-[10px] mt-1 ml-5">
+                                            Choose cash or a bank to see balance information
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         )}
-
                         <div className="flex gap-3">
                             <button
                                 onClick={handlePurchase}
-                                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300"
+                                disabled={purchaseBank && !checkSufficientBalance()}
+                                className={`flex items-center gap-2 px-6 py-2 font-semibold rounded-xl transition-all duration-300 ${purchaseBank && !checkSufficientBalance()
+                                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                        : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-md"
+                                    }`}
                             >
-                                <Save className="w-4 h-4" /> 
+                                <Save className="w-4 h-4" />
                                 {editingId ? "Update Purchase" : "Save Purchase"}
+                                {purchaseBank && !checkSufficientBalance() && " (Insufficient Balance)"}
                             </button>
                             <button
                                 onClick={() => {
@@ -1000,13 +1229,12 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
                                         <tr key={t.id} className="hover:bg-green-50 transition-all duration-200">
                                             <td className="px-6 py-2">{t.date}</td>
                                             <td className="px-6 py-2">
-                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                                    t.transactionType === "stock_in" 
-                                                        ? "bg-blue-100 text-blue-800" 
-                                                        : "bg-orange-100 text-orange-800"
-                                                }`}>
-                                                    {t.transactionType === "stock_in" ? 
-                                                        <ArrowDownCircle className="w-3 h-3" /> : 
+                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${t.transactionType === "stock_in"
+                                                    ? "bg-blue-100 text-blue-800"
+                                                    : "bg-orange-100 text-orange-800"
+                                                    }`}>
+                                                    {t.transactionType === "stock_in" ?
+                                                        <ArrowDownCircle className="w-3 h-3" /> :
                                                         <ArrowUpCircle className="w-3 h-3" />
                                                     }
                                                     {t.transactionType === "stock_in" ? "Purchase" : "Issue"}
@@ -1085,7 +1313,7 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
 function StatCard({ title, value, icon, color }) {
     const colorClasses = {
         blue: "border-blue-100",
-        orange: "border-orange-100", 
+        orange: "border-orange-100",
         green: "border-green-100",
         purple: "border-purple-100"
     };
@@ -1093,7 +1321,7 @@ function StatCard({ title, value, icon, color }) {
     const bgColorClasses = {
         blue: "bg-blue-100",
         orange: "bg-orange-100",
-        green: "bg-green-100", 
+        green: "bg-green-100",
         purple: "bg-purple-100"
     };
 
@@ -1113,7 +1341,7 @@ function StatCard({ title, value, icon, color }) {
 // Product-specific Stat Card
 function ProductStatCard({ product }) {
     const stockPercentage = Math.min((product.stock / (product.stock + 50)) * 100, 100);
-    
+
     return (
         <div className="bg-white rounded-2xl p-4 shadow-lg border border-green-100 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
@@ -1142,11 +1370,10 @@ function ProductStatCard({ product }) {
                     <span>{Math.round(stockPercentage)}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                        className={`h-2 rounded-full transition-all duration-300 ${
-                            stockPercentage > 70 ? 'bg-green-500' : 
+                    <div
+                        className={`h-2 rounded-full transition-all duration-300 ${stockPercentage > 70 ? 'bg-green-500' :
                             stockPercentage > 30 ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}
+                            }`}
                         style={{ width: `${stockPercentage}%` }}
                     ></div>
                 </div>
