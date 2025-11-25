@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Save, Landmark, Edit3, Trash2, Search, X, Wallet, ChevronDown, BarChart3, Lock } from "lucide-react";
-import { db } from "../lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { db,auth } from "../lib/firebase";
+import { collection, query, where, getDocs ,addDoc ,doc ,updateDoc,deleteDoc } from "firebase/firestore";
 import { useGlobalCash } from "../hooks/useGlobalCash";
 
 export default function BankManager({ 
@@ -55,6 +55,25 @@ export default function BankManager({
     setLoadingLedgers(false);
   }
 };
+
+const loadBanks = async () => {
+  try {
+    const q = query(collection(db, "banks"));
+    const snapshot = await getDocs(q);
+    const data = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    setBanksData(data);
+    console.log("✔ Banks loaded:", data.length);
+  } catch (error) {
+    console.error("Error loading banks:", error);
+  }
+};
+
+useEffect(() => {
+  loadBanks();
+}, []);
 
   useEffect(() => {
     loadLedgerCodes();
@@ -148,41 +167,93 @@ export default function BankManager({
   const totalBankBalance = bankStats.reduce((total, bank) => total + bank.calculatedBalance, 0);
   const totalBalance = totalBankBalance + cashBalance;
 
-  // Bank management functions
-  const handleSave = () => {
-    if (!bankName.trim() || !accountTitle.trim() || !accountNumber.trim() || balance === "") {
-      alert("Please fill all fields before saving.");
+ // Bank management functions
+const handleSave = async () => {
+  console.log("💾 SAVE CLICKED");
+  if (!bankName.trim() || !accountTitle.trim() || !accountNumber.trim() || balance === "") {
+    alert("Please fill all fields before saving.");
+    return;
+  }
+
+  const userId = auth.currentUser?.uid;
+  if (!userId) {
+    alert("❌ No logged-in user! Cannot save bank.");
+    return;
+  }
+
+  try {
+    // 1) Check for duplicates (same bankName + accountNumber)
+    const q = query(
+      collection(db, "banks"),
+      where("bankName", "==", bankName.trim()),
+      where("accountNumber", "==", accountNumber.trim())
+    );
+    const snapshot = await getDocs(q);
+
+    if (!editingId && !snapshot.empty) {
+      alert("❌ Bank with this name and account number already exists!");
       return;
     }
 
     if (editingId) {
-      setBanksData(prev => prev.map(bank => 
-        bank.id === editingId 
-          ? { ...bank, bankName, accountTitle, accountNumber, balance: parseFloat(balance) }
-          : bank
-      ));
-      alert("✅ Bank updated successfully!");
+      // Update existing
+      const ref = doc(db, "banks", editingId);
+      await updateDoc(ref, {
+        bankName: bankName.trim(),
+        accountTitle: accountTitle.trim(),
+        accountNumber: accountNumber.trim(),
+        balance: parseFloat(balance),
+        updatedAt: new Date().toISOString(),
+      });
+
+      setBanksData(prev =>
+        prev.map(bank =>
+          bank.id === editingId
+            ? { ...bank, bankName: bankName.trim(), accountTitle: accountTitle.trim(), accountNumber: accountNumber.trim(), balance: parseFloat(balance) }
+            : bank
+        )
+      );
+      alert("✔ Bank updated successfully!");
       setEditingId(null);
     } else {
-      const newBank = {
-        id: Date.now().toString(),
-        bankName,
-        accountTitle,
-        accountNumber,
+      // Add new
+      const docRef = await addDoc(collection(db, "banks"), {
+        bankName: bankName.trim(),
+        accountTitle: accountTitle.trim(),
+        accountNumber: accountNumber.trim(),
         balance: parseFloat(balance),
-        createdAt: new Date().toISOString()
-      };
-      setBanksData(prev => [...prev, newBank]);
-      alert("✅ Bank added successfully!");
-    }
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
-    setBankName("");
-    setAccountTitle("");
-    setAccountNumber("");
-    setBalance("");
-    setShowForm(false);
-    setBankDropdownOpen(false);
-  };
+      setBanksData(prev => [
+        ...prev,
+        {
+          id: docRef.id,
+          bankName: bankName.trim(),
+          accountTitle: accountTitle.trim(),
+          accountNumber: accountNumber.trim(),
+          balance: parseFloat(balance),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      ]);
+
+      alert("✔ Bank added successfully!");
+    }
+  } catch (error) {
+    console.error("🔥 Firestore SAVE ERROR →", error);
+    alert("❌ Failed to save the bank: " + error.message);
+  }
+
+  // Reset form and refresh table
+  setBankName("");
+  setAccountTitle("");
+  setAccountNumber("");
+  setBalance("");
+  setShowForm(false);
+  setBankDropdownOpen(false);
+}
 
   const handleEdit = (bank) => {
     setEditingId(bank.id);
@@ -193,11 +264,23 @@ export default function BankManager({
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
-    if (!confirm("Are you sure you want to delete this bank account?")) return;
+const handleDelete = async (id) => {
+  if (!confirm("Are you sure you want to delete this bank account?")) return;
+
+  try {
+    // 1) Delete from Firestore
+    const ref = doc(db, "banks", id);
+    await deleteDoc(ref);
+
+    // 2) Delete from state
     setBanksData(prev => prev.filter(bank => bank.id !== id));
-    alert("✅ Bank account deleted");
-  };
+
+    alert("✔ Bank deleted successfully from Firestore!");
+  } catch (error) {
+    console.error("Error deleting bank:", error);
+    alert("❌ Failed to delete bank!");
+  }
+};
 
   const selectBankName = (name) => {
     setBankName(name);
