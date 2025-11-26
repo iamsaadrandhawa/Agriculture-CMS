@@ -42,7 +42,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useGlobalCash } from "../hooks/useGlobalCash";
 
-export default function AgriStore({ banksData = [], setBanksData, cashBalance, setCashBalance }) {
+export default function AgriStore({ banksData = [], setBanksData }) {
     const [role, setRole] = useState("");
     const [showPurchaseForm, setShowPurchaseForm] = useState(false);
     const [showIssueForm, setShowIssueForm] = useState(false);
@@ -73,6 +73,9 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
     const [issueLocation, setIssueLocation] = useState("");
     const [landArea, setLandArea] = useState("");
     const [issueRemarks, setIssueRemarks] = useState("");
+
+    // ✅ Use the global cash hook instead of receiving cashBalance as prop
+    const { cashBalance, updateCashBalance } = useGlobalCash();
 
     useEffect(() => {
         const fetchUserRole = async () => {
@@ -151,7 +154,7 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
             const locationList = transactionsList
                 .map(t => t.location)
                 .filter(location => location && location.trim() !== "");
-            setLocations([...new Set(locationList)]);
+                setLocations([...new Set(locationList)]);
         }
     };
 
@@ -239,155 +242,6 @@ export default function AgriStore({ banksData = [], setBanksData, cashBalance, s
         }))
         .filter(product => product.stock > 0); // Only show products with stock
 
-
-const updateGlobalCashInFirestore = async (newBalance) => {
-    try {
-        console.log("🔍 Checking globalcash collection...");
-        const cashQuery = query(collection(db, "globalcash"));
-        const snapshot = await getDocs(cashQuery);
-        
-        console.log("📊 Globalcash documents found:", snapshot.size);
-        
-        if (!snapshot.empty) {
-            const cashDoc = snapshot.docs[0];
-            console.log("📝 Updating existing globalcash document:", cashDoc.id);
-            
-            await updateDoc(doc(db, "globalcash", cashDoc.id), {
-                balance: newBalance,
-                updatedAt: new Date().toISOString()
-            });
-            console.log("✅ Global cash updated in Firestore: Rs. ${newBalance}");
-            return true;
-        } else {
-            console.log("🆕 Creating new globalcash document...");
-            await addDoc(collection(db, "globalcash"), {
-                balance: newBalance,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            });
-            console.log("✅ Global cash created in Firestore: Rs. ${newBalance}");
-            return true;
-        }
-    } catch (error) {
-        console.error("❌ Error updating global cash in Firestore:", error);
-        console.error("❌ Error code:", error.code);
-        console.error("❌ Error message:", error.message);
-        return false;
-    }
-};
-// Updated handlePurchase function
-const handlePurchase = async () => {
-    if (!purchaseDate || !purchaseProduct || !purchaseQuantity || !purchaseRate) {
-        alert("Please fill all required fields!");
-        return;
-    }
-
-    const totalAmount = Number(purchaseQuantity) * Number(purchaseRate);
-    const data = {
-        date: purchaseDate,
-        transactionType: "stock_in",
-        productName: purchaseProduct,
-        quantity: Number(purchaseQuantity),
-        unit: purchaseUnit,
-        rate: Number(purchaseRate),
-        totalAmount: totalAmount,
-        supplier,
-        remarks: purchaseRemarks,
-        bank_name: purchaseBank,
-        amount: totalAmount,
-        updatedAt: Timestamp.now(),
-    };
-
-    console.log("🔄 Starting purchase process...");
-    console.log("📦 Purchase data:", data);
-
-    try {
-        let transactionId;
-        
-        if (editingId) {
-            console.log("✏️ Updating existing transaction:", editingId);
-            await updateDoc(doc(db, "agristore_transactions", editingId), data);
-            alert("✅ Purchase updated successfully!");
-            transactionId = editingId;
-        } else {
-            console.log("➕ Adding new transaction to Firestore...");
-            const docRef = await addDoc(collection(db, "agristore_transactions"), data);
-            transactionId = docRef.id;
-            console.log("✅ Transaction saved with ID:", transactionId);
-            alert("✅ Purchase recorded successfully!");
-        }
-
-        // ✅ Update balances after successful transaction save
-        if (!editingId && purchaseBank) {
-            console.log("💰 Updating balances for payment method:", purchaseBank);
-            
-            if (purchaseBank === "cash") {
-                const newCashBalance = cashBalance - totalAmount;
-                console.log("💵 Updating cash balance:", { current: cashBalance, deduction: totalAmount, new: newCashBalance });
-                
-                // 1. Update local state
-                setCashBalance(newCashBalance);
-                localStorage.setItem("cashBalance", newCashBalance.toString());
-                
-                // 2. Update in Firestore
-                console.log("📡 Updating global cash in Firestore...");
-                const cashUpdateSuccess = await updateGlobalCashInFirestore(newCashBalance);
-                
-                if (cashUpdateSuccess) {
-                    console.log("✅ Global cash updated successfully");
-                } else {
-                    console.warn("⚠️ Purchase saved but global cash update in Firestore had issues");
-                }
-                
-            } else {
-                console.log("🏦 Updating bank balance for:", purchaseBank);
-                const bankUpdateSuccess = await updateBankBalance(purchaseBank, -totalAmount);
-                if (bankUpdateSuccess) {
-                    console.log("✅ Bank balance updated successfully");
-                } else {
-                    console.warn("⚠️ Purchase saved but bank balance update had issues");
-                }
-            }
-        }
-
-        console.log("🔄 Resetting form and refreshing data...");
-        resetPurchaseForm();
-        setShowPurchaseForm(false);
-        fetchTransactions();
-        console.log("🎉 Purchase process completed successfully!");
-
-    } catch (error) {
-        console.error("❌ FULL ERROR DETAILS:", error);
-        console.error("❌ Error code:", error.code);
-        console.error("❌ Error message:", error.message);
-        console.error("❌ Error stack:", error.stack);
-        
-        // More specific error messages
-        if (error.code === 'permission-denied') {
-            alert("❌ Permission denied! Check Firestore security rules.");
-        } else if (error.code === 'not-found') {
-            alert("❌ Document not found! Check collection names.");
-        } else if (error.code === 'unavailable') {
-            alert("❌ Network error! Check your internet connection.");
-        } else {
-            alert("❌ Failed to save purchase: " + error.message);
-        }
-    }
-};
-
-
-    const updateBalancesSafely = (totalAmount) => {
-        if (purchaseBank === "cash") {
-            const newCashBalance = cashBalance - totalAmount;
-            setCashBalance(newCashBalance);
-            localStorage.setItem("cashBalance", newCashBalance.toString());
-        } else if (purchaseBank && purchaseBank !== "cash") {
-            updateBankBalance(purchaseBank, -totalAmount);
-        }
-    };
-
-// Function to update global cash in Firestore
-
     // Function to update bank balance in both state and Firestore
     const updateBankBalance = async (bankName, amount) => {
         try {
@@ -426,6 +280,115 @@ const handlePurchase = async () => {
         }
     };
 
+    
+  // Updated handlePurchase function in AgriStore component
+const handlePurchase = async () => {
+    if (!purchaseDate || !purchaseProduct || !purchaseQuantity || !purchaseRate) {
+        alert("Please fill all required fields!");
+        return;
+    }
+
+    const totalAmount = Number(purchaseQuantity) * Number(purchaseRate);
+    const data = {
+        date: purchaseDate,
+        transactionType: "stock_in",
+        productName: purchaseProduct,
+        quantity: Number(purchaseQuantity),
+        unit: purchaseUnit,
+        rate: Number(purchaseRate),
+        totalAmount: totalAmount,
+        supplier,
+        remarks: purchaseRemarks,
+        bank_name: purchaseBank,
+        amount: totalAmount,
+        updatedAt: Timestamp.now(),
+    };
+
+    console.log("🔄 Starting purchase process...");
+    console.log("📦 Purchase data:", data);
+    console.log("💰 Purchase details:", {
+        totalAmount,
+        paymentMethod: purchaseBank,
+        currentCashBalance: cashBalance
+    });
+
+    try {
+        let transactionId;
+        
+        if (editingId) {
+            console.log("✏️ Updating existing transaction:", editingId);
+            await updateDoc(doc(db, "agristore_transactions", editingId), data);
+            alert("✅ Purchase updated successfully!");
+            transactionId = editingId;
+        } else {
+            console.log("➕ Adding new transaction to Firestore...");
+            const docRef = await addDoc(collection(db, "agristore_transactions"), data);
+            transactionId = docRef.id;
+            console.log("✅ Transaction saved with ID:", transactionId);
+            alert("✅ Purchase recorded successfully!");
+        }
+
+        // ✅ Update balances after successful transaction save
+        if (!editingId && purchaseBank) {
+            console.log("💰 Updating balances for payment method:", purchaseBank);
+            
+            if (purchaseBank === "cash") {
+                console.log("💵 Processing cash payment:", { 
+                    currentBalance: cashBalance, 
+                    purchaseAmount: totalAmount, 
+                    expectedNewBalance: cashBalance - totalAmount 
+                });
+                
+                // Calculate the expected new balance BEFORE updating
+                const expectedNewBalance = cashBalance - totalAmount;
+                
+                // Use the updateCashBalance function with NEGATIVE amount to deduct
+                const success = await updateCashBalance(-totalAmount);
+                
+                if (success) {
+                    console.log("✅ Global cash updated successfully");
+                    console.log("💵 Balance after purchase:", expectedNewBalance); // Use calculated value
+                } else {
+                    console.warn("⚠️ Purchase saved but global cash update in Firestore had issues");
+                    alert("⚠️ Purchase recorded but there was an issue updating the cash balance. Please refresh the page.");
+                }
+                
+            } else {
+                console.log("🏦 Updating bank balance for:", purchaseBank);
+                const bankUpdateSuccess = await updateBankBalance(purchaseBank, -totalAmount);
+                if (bankUpdateSuccess) {
+                    console.log("✅ Bank balance updated successfully");
+                } else {
+                    console.warn("⚠️ Purchase saved but bank balance update had issues");
+                    alert("⚠️ Purchase recorded but there was an issue updating the bank balance. Please refresh the page.");
+                }
+            }
+        }
+
+        console.log("🔄 Resetting form and refreshing data...");
+        resetPurchaseForm();
+        setShowPurchaseForm(false);
+        await fetchTransactions(); // Wait for transactions to refresh
+        console.log("🎉 Purchase process completed successfully!");
+
+    } catch (error) {
+        console.error("❌ FULL ERROR DETAILS:", error);
+        console.error("❌ Error code:", error.code);
+        console.error("❌ Error message:", error.message);
+        console.error("❌ Error stack:", error.stack);
+        
+        // More specific error messages
+        if (error.code === 'permission-denied') {
+            alert("❌ Permission denied! Check Firestore security rules.");
+        } else if (error.code === 'not-found') {
+            alert("❌ Document not found! Check collection names.");
+        } else if (error.code === 'unavailable') {
+            alert("❌ Network error! Check your internet connection.");
+        } else {
+            alert("❌ Failed to save purchase: " + error.message);
+        }
+    }
+};
     // Check if sufficient balance exists
     const checkSufficientBalance = () => {
         const totalAmount = Number(purchaseQuantity) * Number(purchaseRate);
@@ -439,6 +402,7 @@ const handlePurchase = async () => {
         }
         return true; // If no payment method selected yet
     };
+
     const handleIssue = async () => {
         if (!issueDate || !issueProduct || !issueQuantity || !issueLocation) {
             alert("Please fill all required fields!");
@@ -1103,10 +1067,182 @@ const handlePurchase = async () => {
                     </div>
                 )}
 
-                {/* 📤 Issue Form - Remains the same as before */}
+                {/* 📤 Issue Form */}
                 {showIssueForm && (
                     <div className="bg-white rounded-2xl p-6 mb-4 shadow-lg border border-orange-200 text-[12px] text-gray-800">
-                        {/* ... existing issue form code ... */}
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-[12px] font-bold text-gray-900">
+                                {editingId ? "✏️ Edit Issue" : "📤 Issue Stock"}
+                            </h3>
+                            <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse"></div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                            {/* Date */}
+                            <div className="relative">
+                                <label className="block font-semibold text-gray-700 mb-1">Date *</label>
+                                <input
+                                    type="date"
+                                    value={issueDate}
+                                    onChange={(e) => setIssueDate(e.target.value)}
+                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 text-gray-700"
+                                />
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-[10%] text-gray-400 w-4 h-4 pointer-events-none" />
+                            </div>
+
+                            {/* Product Name */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Product Name *</label>
+                                <select
+                                    value={issueProduct}
+                                    onChange={(e) => setIssueProduct(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">Select Product</option>
+                                    {products.map((product, index) => (
+                                        <option key={index} value={product}>{product}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Available Stock Display */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Available Stock</label>
+                                <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-gray-700">
+                                    {issueProduct ? (
+                                        <span className="font-semibold">
+                                            {getProductStock(issueProduct)} {issueUnit}
+                                        </span>
+                                    ) : (
+                                        <span className="text-gray-500">Select a product</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Quantity & Unit */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Quantity *</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="number"
+                                        value={issueQuantity}
+                                        onChange={(e) => setIssueQuantity(e.target.value)}
+                                        placeholder="0"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                    />
+                                    <select
+                                        value={issueUnit}
+                                        onChange={(e) => setIssueUnit(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                    >
+                                        <option value="kg">kg</option>
+                                        <option value="g">g</option>
+                                        <option value="l">l</option>
+                                        <option value="ml">ml</option>
+                                        <option value="bag">bag</option>
+                                        <option value="unit">unit</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Location */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Location *</label>
+                                <select
+                                    value={issueLocation}
+                                    onChange={(e) => setIssueLocation(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">Select Location</option>
+                                    {locations.map((location, index) => (
+                                        <option key={index} value={location}>{location}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-gray-500 mt-1">
+                                    Locations are managed in Ledger Manager (category: location)
+                                </p>
+                            </div>
+
+                            {/* Land Area */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-1">Land Area</label>
+                                <input
+                                    type="text"
+                                    value={landArea}
+                                    onChange={(e) => setLandArea(e.target.value)}
+                                    placeholder="e.g., 2 acres"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+
+                            {/* Remarks */}
+                            <div className="lg:col-span-3">
+                                <label className="block font-semibold text-gray-700 mb-1">Remarks</label>
+                                <input
+                                    type="text"
+                                    value={issueRemarks}
+                                    onChange={(e) => setIssueRemarks(e.target.value)}
+                                    placeholder="Additional notes..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Stock Validation */}
+                        {issueProduct && issueQuantity && (
+                            <div className="mb-4">
+                                {Number(issueQuantity) > getProductStock(issueProduct) ? (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                            <p className="text-red-800 font-semibold text-[11px]">
+                                                ⚠️ Insufficient Stock!
+                                            </p>
+                                        </div>
+                                        <p className="text-red-700 text-[10px] mt-1 ml-5">
+                                            Available: {getProductStock(issueProduct)} {issueUnit} | 
+                                            Requested: {issueQuantity} {issueUnit}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                            <p className="text-green-800 font-semibold text-[11px]">
+                                                ✅ Sufficient Stock Available
+                                            </p>
+                                        </div>
+                                        <p className="text-green-700 text-[10px] mt-1 ml-5">
+                                            Stock after issue: {getProductStock(issueProduct) - Number(issueQuantity)} {issueUnit}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleIssue}
+                                disabled={issueProduct && issueQuantity && Number(issueQuantity) > getProductStock(issueProduct)}
+                                className={`flex items-center gap-2 px-6 py-2 font-semibold rounded-xl transition-all duration-300 ${issueProduct && issueQuantity && Number(issueQuantity) > getProductStock(issueProduct)
+                                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                        : "bg-gradient-to-r from-orange-600 to-orange-700 text-white hover:from-orange-700 hover:to-orange-800 shadow-md"
+                                    }`}
+                            >
+                                <Save className="w-4 h-4" />
+                                {editingId ? "Update Issue" : "Save Issue"}
+                                {issueProduct && issueQuantity && Number(issueQuantity) > getProductStock(issueProduct) && " (Insufficient Stock)"}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowIssueForm(false);
+                                    resetIssueForm();
+                                }}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
                 )}
 

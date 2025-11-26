@@ -49,6 +49,26 @@ function getStoredUser() {
   }
 }
 
+// ✅ Helper to load bank data from localStorage
+function getStoredBanksData() {
+  try {
+    const data = localStorage.getItem("banksData");
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+// ✅ Helper to load shared transactions data from localStorage
+function getStoredSharedData() {
+  try {
+    const data = localStorage.getItem("sharedData");
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
@@ -76,27 +96,35 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // ✅ Load global data (shared among users) - Remove cashBalance from localStorage
+  // ✅ Load global data (shared among users) - FIXED: Load data immediately on component mount
   useEffect(() => {
-    const savedTransactions = localStorage.getItem("sharedData");
-    const savedBanks = localStorage.getItem("banksData");
+    console.log("🔄 Loading global data from localStorage...");
 
-    if (savedTransactions) {
-      setDailyTransactionsData(JSON.parse(savedTransactions));
-    }
-    if (savedBanks) {
-      setBanksData(JSON.parse(savedBanks));
-    }
+    const savedTransactions = getStoredSharedData();
+    const savedBanks = getStoredBanksData();
+
+    console.log("📊 Loaded transactions:", savedTransactions.length);
+    console.log("🏦 Loaded banks:", savedBanks.length);
+
+    setDailyTransactionsData(savedTransactions);
+    setBanksData(savedBanks);
   }, []);
 
-  // ✅ Save data globally so every user sees same thing - Remove cashBalance from localStorage
+  // ✅ Save data globally so every user sees same thing
   useEffect(() => {
-    localStorage.setItem("sharedData", JSON.stringify(dailyTransactionsData));
-    localStorage.setItem("banksData", JSON.stringify(banksData));
+    if (dailyTransactionsData.length > 0 || banksData.length > 0) {
+      console.log("💾 Saving global data to localStorage...");
+      localStorage.setItem("sharedData", JSON.stringify(dailyTransactionsData));
+      localStorage.setItem("banksData", JSON.stringify(banksData));
+    }
   }, [dailyTransactionsData, banksData]);
 
-  // ✅ Calculate total bank balance
-  const totalBankBalance = banksData.reduce((total, bank) => total + (parseFloat(bank.balance) || 0), 0);
+  // ✅ Calculate total bank balance - FIXED: Handle empty/undefined data
+  const totalBankBalance = banksData.reduce((total, bank) => {
+    const balance = parseFloat(bank?.balance) || 0;
+    return total + balance;
+  }, 0);
+
   const totalBalance = totalBankBalance + cashBalance;
 
   // ✅ Firebase Auth + get role from localStorage
@@ -109,14 +137,15 @@ export default function Dashboard() {
         setUser(currentUser);
         setRole(storedUser?.role || "read");
         setName(storedUser?.name || "");
-        
+
         console.log(`🚀 QODIGI SYSTEM: Dashboard loaded for ${storedUser?.email}`);
         console.log(`🎯 QODIGI ROLE: ${storedUser?.role} | Platform: qodigi-rms-v1.0`);
         console.log(`💰 GLOBAL CASH: Rs. ${cashBalance.toLocaleString()} (Firestore)`);
+        console.log(`🏦 BANK BALANCE: Rs. ${totalBankBalance.toLocaleString()} (${banksData.length} banks)`);
       }
     });
     return () => unsubscribe();
-  }, [cashBalance]);
+  }, [cashBalance, totalBankBalance, banksData.length]);
 
   // ✅ Logout with Qodigi tracking
   const handleLogout = async () => {
@@ -141,7 +170,6 @@ export default function Dashboard() {
       banksData,
       setBanksData,
       cashBalance,
-      // Remove setCashBalance since it's now managed by the hook
     };
 
     switch (activeSection) {
@@ -150,7 +178,10 @@ export default function Dashboard() {
       case "reports":
         return <Reports {...sharedProps} />;
       case "Agristore":
-        return <AgriStore {...sharedProps} />;
+        return <AgriStore
+          banksData={banksData}
+          setBanksData={setBanksData}
+        />;
       case "employees":
         return <Employees {...sharedProps} />;
       case "bikes":
@@ -167,7 +198,7 @@ export default function Dashboard() {
         );
       case "ledger-manager":
         return role === "admin" ? <LedgerCodes {...sharedProps} /> : (
-          <div className="access-denied"> 
+          <div className="access-denied">
             <Shield className="denied-icon" />
             <h3>Access Denied</h3>
             <p>You do not have permission to access Ledger Codes.</p>
@@ -226,7 +257,7 @@ export default function Dashboard() {
       <div className="background-animation">
         <div className="animation-container"></div>
         <div className="gradient-overlay"></div>
-        
+
         {/* Qodigi Background Signature */}
         <div className="qodigi-watermark">
           <div className="qodigi-text">QODIGI</div>
@@ -253,7 +284,7 @@ export default function Dashboard() {
                       {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                     </button>
                   )}
-                  
+
                   <div className="logo-circle">
                     <img
                       src="/logo.png"
@@ -261,13 +292,13 @@ export default function Dashboard() {
                       className="logo-image"
                     />
                   </div>
-                  
+
                   <div className="logo-text">
                     <h2>Agriculture</h2>
                     <p>Management System</p>
                   </div>
                 </div>
-                
+
                 {/* Balance Stats - Hidden on mobile */}
                 {!isMobile && (
                   <div className="balance-stats">
@@ -452,7 +483,7 @@ export default function Dashboard() {
                   );
                 })}
               </nav>
-              
+
               {/* Mobile Balance Card */}
               <div className="mobile-balance-card">
                 <div className="balance-row">
@@ -507,11 +538,15 @@ export default function Dashboard() {
                 <span className="status-cash">
                   Cash: {cashLoading ? "Loading..." : `Rs. ${cashBalance.toLocaleString()}`}
                 </span>
+                <span className="status-separator">|</span>
+                <span className="status-banks">
+                  Banks: Rs. {totalBankBalance.toLocaleString()}
+                </span>
               </>
             )}
           </div>
           <div className="status-right">
-            <span 
+            <span
               className="status-link"
               onClick={handleContactQodigi}
               title="Visit Qodigi Website"
@@ -525,12 +560,12 @@ export default function Dashboard() {
       </div>
 
       {/* Hidden Qodigi Metadata */}
-      <div style={{ display: 'none' }} 
-           data-platform="qodigi-rms" 
-           data-version="1.0" 
-           data-company="Qodigi"
-           data-user-role={role}
-           data-user-name={name}>
+      <div style={{ display: 'none' }}
+        data-platform="qodigi-rms"
+        data-version="1.0"
+        data-company="Qodigi"
+        data-user-role={role}
+        data-user-name={name}>
         Qodigi Agricultural Management System - Secure, Reliable, Professional
       </div>
 

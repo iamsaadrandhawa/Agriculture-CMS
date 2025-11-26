@@ -820,8 +820,10 @@ export default function DailyTransactions() {
   const filteredLedgers = ledgerCodes.filter(ledger =>
     ledger.code.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
     (ledger.name || '').toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
+    (ledger.subCategory || '').toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
     (ledger.description || '').toLowerCase().includes(ledgerSearchTerm.toLowerCase())
   );
+  
 
   const filteredEmployees = employees.filter(employee =>
     employee.name.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
@@ -833,10 +835,10 @@ export default function DailyTransactions() {
   const getTransactionType = (row) => {
     const hasIncome = (row.cash_in && parseFloat(row.cash_in) > 0) || (row.bank_in && parseFloat(row.bank_in) > 0);
     const hasExpense = (row.expenditure_out && parseFloat(row.expenditure_out) > 0) || (row.expenditure_cash && parseFloat(row.expenditure_cash) > 0);
-
     if (hasIncome && !hasExpense) return "Income";
     if (!hasIncome && hasExpense) return "Expense";
     if (hasIncome && hasExpense) return "Mixed";
+
     return "Select Amount";
   };
 
@@ -940,89 +942,126 @@ export default function DailyTransactions() {
                     key={row.id}
                     className="grid grid-cols-9 gap-2 mb-1 px-3 items-center bg-white rounded-lg shadow-sm hover:shadow-md transition py-1 text-xs"
                   >
-                    {/* Ledger Code with Search */}
-                    <div className="relative dropdown-container">
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setOpenDropdowns(prev => ({
-                            ...prev,
-                            ledger: openDropdowns.ledger === index ? null : index
-                          }))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs text-left focus:outline-none focus:ring-2 focus:ring-green-500 bg-white flex justify-between items-center"
-                        >
-                          <span className="truncate">
-                            {row.ledger_code_id ? (
-                              selectedLedger?.code || "Select Ledger"
-                            ) : (
-                              "Select Ledger"
-                            )}
-                          </span>
-                          <Search className="w-3 h-3 text-gray-400" />
-                        </button>
+                   {/* Ledger Code with Search */}
+<div className="relative dropdown-container">
+  <div className="relative">
+    <button
+      type="button"
+      onClick={() => setOpenDropdowns(prev => ({
+        ...prev,
+        ledger: openDropdowns.ledger === index ? null : index
+      }))}
+      className="w-full border border-gray-300 rounded px-2 py-1 text-xs text-left focus:outline-none focus:ring-2 focus:ring-green-500 bg-white flex justify-between items-center"
+    >
+      <span className="truncate">
+        {row.ledger_code_id ? (
+          selectedLedger?.code || "Select Ledger"
+        ) : (
+          "Select Ledger"
+        )}
+      </span>
+      <Search className="w-3 h-3 text-gray-400" />
+    </button>
 
-                        {openDropdowns.ledger === index && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {/* Search Input */}
-                            <div className="sticky top-0 bg-white p-2 border-b border-gray-200">
-                              <div className="relative">
-                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
-                                <input
-                                  type="text"
-                                  placeholder="Search ledger..."
-                                  value={ledgerSearchTerm}
-                                  onChange={(e) => setLedgerSearchTerm(e.target.value)}
-                                  className="w-full pl-8 pr-6 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
-                                  autoFocus
-                                />
-                                {ledgerSearchTerm && (
-                                  <button
-                                    onClick={() => setLedgerSearchTerm("")}
-                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+    {openDropdowns.ledger === index && (
+      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+        {/* Search Input */}
+        <div className="sticky top-0 bg-white p-2 border-b border-gray-200">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search ledger..."
+              value={ledgerSearchTerm}
+              onChange={(e) => setLedgerSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-6 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
+              autoFocus
+            />
+            {ledgerSearchTerm && (
+              <button
+                onClick={() => setLedgerSearchTerm("")}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
 
-                            {/* Filtered Options */}
-                            <div className="py-1 max-h-48 overflow-y-auto">
-                              {filteredLedgers.map((ledger) => (
-                                <button
-                                  key={ledger.id}
-                                  type="button"
-                                  onClick={() => {
-                                    handleInputChange(index, "ledger_code_id", ledger.id);
-                                    setOpenDropdowns(prev => ({ ...prev, ledger: null }));
-                                    setLedgerSearchTerm("");
-                                  }}
-                                  className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex flex-col ${row.ledger_code_id === ledger.id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
-                                    }`}
-                                >
-                                  <div className="font-medium">{ledger.code}</div>
-                                  <div className="text-gray-500 text-[10px] truncate">
-                                    {ledger.name || ledger.description || 'No description'}
-                                  </div>
-                                  <div className={`text-[9px] mt-1 px-1 rounded ${ledger.category === 'income'
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-red-100 text-red-800'
-                                    }`}>
-                                    {ledger.category || 'uncategorized'}
-                                  </div>
-                                </button>
-                              ))}
+        {/* Filtered Options */}
+        <div className="py-1 max-h-48 overflow-y-auto">
+          {filteredLedgers.map((ledger) => (
+            <button
+              key={ledger.id}
+              type="button"
+              onClick={() => {
+                handleInputChange(index, "ledger_code_id", ledger.id);
+                setOpenDropdowns(prev => ({ ...prev, ledger: null }));
+                setLedgerSearchTerm("");
+              }}
+              className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex flex-col ${row.ledger_code_id === ledger.id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
+                }`}
+            >
+              {/* Main Code and Name */}
+              <div className="font-medium">{ledger.code}</div>
+              <div className="text-gray-500 text-[10px] truncate">
+                {ledger.name || ledger.description || 'No description'}
+              </div>
+              
+              {/* Category and SubCategory in one line */}
+              <div className="flex gap-1 mt-1">
+                {/* Main Category */}
+                <div className={`text-[9px] px-1 rounded ${ledger.category === 'income'
+                    ? 'bg-green-100 text-green-800'
+                    : ledger.category === 'expense'
+                    ? 'bg-red-100 text-red-800'
+                    : ledger.category === 'asset'
+                    ? 'bg-blue-100 text-blue-800'
+                    : ledger.category === 'liability'
+                    ? 'bg-orange-100 text-orange-800'
+                    : 'bg-gray-100 text-gray-600'
+                  }`}>
+                  {ledger.category || 'uncategorized'}
+                </div>
 
-                              {filteredLedgers.length === 0 && (
-                                <div className="px-3 py-2 text-xs text-gray-500 text-center">
-                                  No ledgers found
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                {/* SubCategory */}
+                {ledger.subCategory && (
+                  <div className={`text-[9px] px-1 rounded ${ledger.subCategory === 'cash'
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : ledger.subCategory === 'bank'
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                      : ledger.subCategory === 'receivable'
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                      : ledger.subCategory === 'payable'
+                      ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                      : ledger.subCategory === 'inventory'
+                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                      : 'bg-gray-50 text-gray-600 border border-gray-200'
+                    }`}>
+                    {ledger.subCategory}
+                  </div>
+                )}
+              </div>
+
+              {/* Additional details if available */}
+              {(ledger.accountType || ledger.nature) && (
+                <div className="text-[8px] text-gray-400 mt-0.5">
+                  {[ledger.accountType, ledger.nature].filter(Boolean).join(' • ')}
+                </div>
+              )}
+            </button>
+          ))}
+
+          {filteredLedgers.length === 0 && (
+            <div className="px-3 py-2 text-xs text-gray-500 text-center">
+              No ledgers found
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+</div>
 
                     {/* Employee with Search */}
                     <div className="relative dropdown-container">

@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot, DocumentSnapshot } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot, 
+  DocumentSnapshot,
+  DocumentData 
+} from 'firebase/firestore';
 
 // Define the structure of the cash document in Firestore
 interface CashDocument {
   balance: number;
-  updatedAt: Date;
-  createdAt?: Date;
+  updatedAt: string;
+  createdAt?: string;
 }
 
 // Define the return type of the hook
@@ -14,8 +21,8 @@ interface UseGlobalCashReturn {
   cashBalance: number;
   loading: boolean;
   error: string | null;
-  updateCashBalance: (newBalance: number) => Promise<boolean>;
-  refreshCashBalance: () => void;
+  updateCashBalance: (amount: number) => Promise<boolean>;
+  refreshCashBalance: () => Promise<void>;
 }
 
 export const useGlobalCash = (): UseGlobalCashReturn => {
@@ -30,8 +37,8 @@ export const useGlobalCash = (): UseGlobalCashReturn => {
     try {
       const initialData: CashDocument = { 
         balance: 0, 
-        updatedAt: new Date(),
-        createdAt: new Date()
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
       await setDoc(cashDocRef, initialData);
       console.log("✅ Cash balance initialized in Firestore");
@@ -41,15 +48,31 @@ export const useGlobalCash = (): UseGlobalCashReturn => {
     }
   };
 
-  // Update cash balance in Firestore
-  const updateCashBalance = async (newBalance: number): Promise<boolean> => {
+  // Update cash balance in Firestore - FIXED VERSION
+  const updateCashBalance = async (amount: number): Promise<boolean> => {
     try {
       setLoading(true);
+      
+      // Calculate new balance by ADDING the amount (negative amounts will subtract)
+      const newBalance = cashBalance + amount;
+      
+      console.log('💰 Updating cash balance:', { 
+        currentBalance: cashBalance, 
+        amount, 
+        newBalance 
+      });
+
       const updateData: Partial<CashDocument> = { 
-        balance: parseFloat(newBalance.toString()) || 0,
-        updatedAt: new Date() 
+        balance: newBalance,
+        updatedAt: new Date().toISOString() 
       };
+      
       await setDoc(cashDocRef, updateData, { merge: true });
+      
+      // Update local state immediately
+      setCashBalance(newBalance);
+      
+      console.log('✅ Cash balance updated successfully');
       return true;
     } catch (error) {
       console.error("Error updating cash balance:", error);
@@ -60,30 +83,31 @@ export const useGlobalCash = (): UseGlobalCashReturn => {
     }
   };
 
-  useEffect(() => {
-    const loadCashBalance = async (): Promise<void> => {
-      try {
-        setLoading(true);
-        const cashDoc: DocumentSnapshot = await getDoc(cashDocRef);
-        
-        if (cashDoc.exists()) {
-          const cashData = cashDoc.data() as CashDocument;
-          const balance = parseFloat(cashData.balance.toString()) || 0;
-          setCashBalance(balance);
-          console.log("✅ Cash balance loaded from Firestore:", balance);
-        } else {
-          // Initialize if document doesn't exist
-          await initializeCashBalance();
-          setCashBalance(0);
-        }
-      } catch (error) {
-        console.error("Error loading cash balance:", error);
-        setError("Failed to load cash balance");
-      } finally {
-        setLoading(false);
+  // Load cash balance
+  const loadCashBalance = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      const cashDoc: DocumentSnapshot = await getDoc(cashDocRef);
+      
+      if (cashDoc.exists()) {
+        const cashData = cashDoc.data() as CashDocument;
+        const balance = parseFloat(cashData.balance.toString()) || 0;
+        setCashBalance(balance);
+        console.log("✅ Cash balance loaded from Firestore:", balance);
+      } else {
+        // Initialize if document doesn't exist
+        await initializeCashBalance();
+        setCashBalance(0);
       }
-    };
+    } catch (error) {
+      console.error("Error loading cash balance:", error);
+      setError("Failed to load cash balance");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadCashBalance();
 
     // Real-time listener for cash balance updates
@@ -93,6 +117,7 @@ export const useGlobalCash = (): UseGlobalCashReturn => {
         if (doc.exists()) {
           const cashData = doc.data() as CashDocument;
           const newBalance = parseFloat(cashData.balance.toString()) || 0;
+          console.log('🔄 Real-time cash balance update:', newBalance);
           setCashBalance(newBalance);
         }
       }, 
@@ -105,13 +130,8 @@ export const useGlobalCash = (): UseGlobalCashReturn => {
     return () => unsubscribe();
   }, []);
 
-  const refreshCashBalance = (): void => {
-    getDoc(cashDocRef).then((doc: DocumentSnapshot) => {
-      if (doc.exists()) {
-        const cashData = doc.data() as CashDocument;
-        setCashBalance(parseFloat(cashData.balance.toString()) || 0);
-      }
-    });
+  const refreshCashBalance = async (): Promise<void> => {
+    await loadCashBalance();
   };
 
   return { 
